@@ -6,6 +6,7 @@ from django.db import models
 class CargoOrder(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
+        SUBMITTED = "submitted", "Submitted"
         PICKUP_IN_PROGRESS = "pickup_in_progress", "Pickup In Progress"
         AT_ORIGIN_STATION = "at_origin_station", "At Origin Station"
         CANCELLED = "cancelled", "Cancelled"
@@ -14,25 +15,19 @@ class CargoOrder(models.Model):
     customer = models.ForeignKey(
         "auths.User", on_delete=models.CASCADE, related_name="orders"
     )
-    origin_station = models.ForeignKey(
-        "stations.CargoStation",
-        on_delete=models.PROTECT,
-        related_name="orders_as_origin",
-    )
-    destination_station = models.ForeignKey(
-        "stations.CargoStation",
-        on_delete=models.PROTECT,
-        related_name="orders_as_destination",
-    )
-    cargo_size = models.ForeignKey(
-        "cargosizes.CargoSize", on_delete=models.PROTECT, related_name="orders"
-    )
+    origin_station = models.CharField(max_length=50)
+    destination_station = models.CharField(max_length=50)
+    cargo_size = models.IntegerField(default=1)
     estimated_weight_kg = models.DecimalField(
         max_digits=8, decimal_places=2, null=True, blank=True
     )
-    notes = models.TextField(blank=True)
+    description = models.TextField(blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    receiver_name = models.CharField(max_length=150, blank=True, default="")
+    receiver_phone = models.CharField(max_length=20, blank=True, default="")
+    receiver_address = models.TextField(blank=True, default="")
     status = models.CharField(
-        max_length=25, choices=Status.choices, default=Status.PENDING
+        max_length=25, choices=Status.choices, default=Status.SUBMITTED
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -41,14 +36,6 @@ class CargoOrder(models.Model):
         indexes = [
             models.Index(fields=["customer"], name="idx_orders_customer"),
             models.Index(fields=["status"], name="idx_orders_status"),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                condition=~models.Q(
-                    origin_station=models.F("destination_station")
-                ),
-                name="origin_ne_destination",
-            ),
         ]
 
     def __str__(self):

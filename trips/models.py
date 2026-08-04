@@ -33,26 +33,13 @@ class CargoTrip(models.Model):
         blank=True,
         related_name="trips",
     )
-    vehicle_type = models.ForeignKey(
-        "vehicles.VehicleType", on_delete=models.PROTECT, related_name="trips"
-    )
+    vehicle_type = models.IntegerField(default=1)
     pickup_latitude = models.DecimalField(max_digits=9, decimal_places=6)
     pickup_longitude = models.DecimalField(max_digits=9, decimal_places=6)
-    pickup_address_text = models.TextField(blank=True)
-    destination_station = models.ForeignKey(
-        "stations.CargoStation",
-        on_delete=models.PROTECT,
-        related_name="trips_as_destination",
-    )
+    pickup_address_text = models.TextField(blank=True, default="")
+    destination_station = models.CharField(max_length=50)
     distance_km = models.DecimalField(
         max_digits=8, decimal_places=2, null=True, blank=True
-    )
-    fare_rate = models.ForeignKey(
-        "farerates.FareRate",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="trips",
     )
     fare_amount = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
