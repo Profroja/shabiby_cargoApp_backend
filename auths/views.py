@@ -136,7 +136,9 @@ class CompleteRegistrationView(APIView):
 
         user.first_name = serializer.validated_data["first_name"]
         user.last_name = serializer.validated_data["last_name"]
-        user.save(update_fields=["first_name", "last_name"])
+        role = serializer.validated_data.get("role", "customer")
+        user.role = role
+        user.save(update_fields=["first_name", "last_name", "role"])
 
         # Issue fresh tokens
         tokens = _jwt_for_user(user)

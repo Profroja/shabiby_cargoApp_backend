@@ -4,15 +4,26 @@ from django.db import models
 
 
 class Driver(models.Model):
+    class ApprovalStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(
         "auths.User", on_delete=models.CASCADE, related_name="driver"
     )
     vehicle_type = models.ForeignKey(
-        "vehicles.VehicleType", on_delete=models.PROTECT, related_name="drivers"
+        "vehicles.VehicleType", on_delete=models.PROTECT, related_name="drivers",
+        null=True, blank=True,
     )
-    license_plate = models.CharField(max_length=20)
-    national_id_number = models.CharField(max_length=50, blank=True)
+    license_plate = models.CharField(max_length=20, blank=True, default="")
+    national_id_number = models.CharField(max_length=50, blank=True, default="")
+    license_photo = models.ImageField(upload_to="driver_licenses/", null=True, blank=True)
+    profile_photo = models.ImageField(upload_to="driver_profiles/", null=True, blank=True)
+    approval_status = models.CharField(
+        max_length=15, choices=ApprovalStatus.choices, default=ApprovalStatus.PENDING
+    )
     is_verified = models.BooleanField(default=False)
     is_online = models.BooleanField(default=False)
     current_latitude = models.DecimalField(
@@ -35,6 +46,7 @@ class Driver(models.Model):
                 fields=["is_online", "vehicle_type"],
                 name="idx_drivers_online_vehicle",
             ),
+            models.Index(fields=["approval_status"], name="idx_drivers_approval"),
         ]
 
     def __str__(self):

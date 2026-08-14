@@ -56,6 +56,9 @@ class CompleteRegistrationSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=20)
     first_name = serializers.CharField(max_length=80)
     last_name = serializers.CharField(max_length=80)
+    role = serializers.ChoiceField(
+        choices=["customer", "driver"], default="customer"
+    )
 
     def validate_phone_number(self, value):
         if User.objects.filter(phone_number=value, first_name__gt="").exists():
