@@ -18,7 +18,10 @@ class Driver(models.Model):
         null=True, blank=True,
     )
     license_plate = models.CharField(max_length=20, blank=True, default="")
+    license_number = models.CharField(max_length=50, blank=True, default="")
     national_id_number = models.CharField(max_length=50, blank=True, default="")
+    vehicle_name = models.CharField(max_length=100, blank=True, default="")
+    vehicle_color = models.CharField(max_length=50, blank=True, default="")
     license_photo = models.ImageField(upload_to="driver_licenses/", null=True, blank=True)
     profile_photo = models.ImageField(upload_to="driver_profiles/", null=True, blank=True)
     approval_status = models.CharField(

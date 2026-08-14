@@ -1,9 +1,10 @@
 from django.contrib.auth import get_user_model
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Driver
 from .serializers import DriverProfileSerializer, DriverRegistrationSerializer
@@ -11,31 +12,76 @@ from .serializers import DriverProfileSerializer, DriverRegistrationSerializer
 User = get_user_model()
 
 
+def _jwt_for_user(user):
+    refresh = RefreshToken.for_user(user)
+    return {"refresh": str(refresh), "access": str(refresh.access_token)}
+
+
 class DriverRegisterView(generics.CreateAPIView):
+    """
+    Combined driver registration after OTP verification.
+    Accepts: first_name, middle_name, last_name, vehicle_type, vehicle_name,
+             vehicle_color, license_plate, license_number, license_photo, profile_photo
+    Requires authentication (temp JWT from verify-otp).
+    Content-Type: multipart/form-data
+    """
     serializer_class = DriverRegistrationSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
     def create(self, request, *args, **kwargs):
         user = request.user
-        if user.role != "driver":
+        if not user.is_authenticated:
             return Response(
-                {"error": "Only users with driver role can register as drivers."},
-                status=status.HTTP_403_FORBIDDEN,
+                {"error": "Authentication required. Verify OTP first."},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
 
         if hasattr(user, "driver"):
             return Response(
-                {"error": "Driver profile already exists. Use PATCH to update."},
+                {"error": "Driver profile already exists. Use PATCH /api/drivers/me/ to update."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        driver = serializer.save(user=user)
+        data = serializer.validated_data
+
+        # Update user with names and driver role
+        user.first_name = data["first_name"]
+        user.middle_name = data.get("middle_name", "")
+        user.last_name = data["last_name"]
+        user.role = "driver"
+        user.save(update_fields=["first_name", "middle_name", "last_name", "role"])
+
+        # Create driver profile
+        from vehicles.models import VehicleType
+        try:
+            vehicle_type = VehicleType.objects.get(id=data["vehicle_type"])
+        except VehicleType.DoesNotExist:
+            return Response(
+                {"error": f"Vehicle type {data['vehicle_type']} not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        driver = Driver.objects.create(
+            user=user,
+            vehicle_type=vehicle_type,
+            vehicle_name=data.get("vehicle_name", ""),
+            vehicle_color=data.get("vehicle_color", ""),
+            license_plate=data["license_plate"],
+            license_number=data["license_number"],
+            license_photo=data["license_photo"],
+            profile_photo=data["profile_photo"],
+        )
+
+        # Issue fresh JWT tokens
+        tokens = _jwt_for_user(user)
 
         output = DriverProfileSerializer(driver, context={"request": request})
-        return Response(output.data, status=status.HTTP_201_CREATED)
+        response_data = output.data
+        response_data["tokens"] = tokens
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
 
 class DriverMeView(generics.RetrieveUpdateAPIView):
