@@ -141,22 +141,28 @@ class CompleteRegistrationView(APIView):
         user.role = role
         user.save(update_fields=["first_name", "middle_name", "last_name", "role"])
 
+        # Send SMS notification to the user
+        full_name = f"{user.first_name} {user.last_name}".strip()
+        sms_message = f"Karibu Shabiby Cargo, {full_name}! Akaunti yako imeundwa kwa mafanikio. Unaweza sasa kutuma na kufuatilia mizigo yako."
+        sms_sent = send_sms_notification(user.phone_number, sms_message)
+
         # Issue fresh tokens
         tokens = _jwt_for_user(user)
-        return Response(
-            {
-                "message": "Registration complete.",
-                "tokens": tokens,
-                "user": {
-                    "id": str(user.id),
-                    "first_name": user.first_name,
-                    "last_name": user.last_name,
-                    "phone_number": user.phone_number,
-                    "role": user.role,
-                },
+        response_data = {
+            "message": "Registration complete.",
+            "registration_status": "success",
+            "sms_notification_sent": sms_sent,
+            "tokens": tokens,
+            "user": {
+                "id": str(user.id),
+                "first_name": user.first_name,
+                "middle_name": user.middle_name,
+                "last_name": user.last_name,
+                "phone_number": user.phone_number,
+                "role": user.role,
             },
-            status=status.HTTP_200_OK,
-        )
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 class GoogleLoginView(APIView):
