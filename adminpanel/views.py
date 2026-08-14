@@ -58,7 +58,12 @@ def dashboard(request):
 @login_required
 @user_passes_test(is_admin)
 def customer_list(request):
-    customers = User.objects.filter(role="customer").order_by("-created_at")
+    from django.db.models import Q
+    # Show users with role=customer OR users who have placed orders
+    customer_ids = CargoOrder.objects.values_list("customer_id", flat=True).distinct()
+    customers = User.objects.filter(
+        Q(role="customer") | Q(id__in=customer_ids)
+    ).order_by("-created_at")
     return render(request, "adminpanel/customers.html", {"customers": customers})
 
 

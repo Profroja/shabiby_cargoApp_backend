@@ -13,6 +13,7 @@
                     <th>Name</th>
                     <th>Phone Number</th>
                     <th>Email</th>
+                    <th>Role</th>
                     <th>Verified</th>
                     <th>Joined</th>
                 </tr>
@@ -20,9 +21,24 @@
             <tbody>
                 {% for customer in customers %}
                 <tr>
-                    <td>{{ customer.first_name }} {{ customer.last_name }}</td>
+                    <td>
+                        {% if customer.first_name %}
+                            {{ customer.first_name }} {{ customer.last_name }}
+                        {% else %}
+                            <span class="text-muted fst-italic">No name (incomplete registration)</span>
+                        {% endif %}
+                    </td>
                     <td>{{ customer.phone_number|default:"—" }}</td>
                     <td>{{ customer.email|default:"—" }}</td>
+                    <td>
+                        {% if customer.role == 'customer' %}
+                        <span class="badge bg-primary">Customer</span>
+                        {% elif customer.role == 'driver' %}
+                        <span class="badge bg-warning text-dark">Driver</span>
+                        {% else %}
+                        <span class="badge bg-secondary">{{ customer.role }}</span>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if customer.is_phone_verified %}
                         <span class="badge bg-success">Yes</span>
@@ -33,7 +49,7 @@
                     <td>{{ customer.created_at|date:"M d, Y H:i" }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="5" class="text-center text-muted py-4">No customers yet.</td></tr>
+                <tr><td colspan="6" class="text-center text-muted py-4">No customers yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
