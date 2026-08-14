@@ -145,6 +145,8 @@ STATIC_ROOT = BASE_DIR / 'static'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+BASE_URL = 'http://213.199.45.120:8080'
+
 AUTH_USER_MODEL = 'auths.User'
 
 CORS_ALLOW_ALL_ORIGINS = True

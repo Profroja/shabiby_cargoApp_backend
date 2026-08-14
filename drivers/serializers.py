@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 
 from .models import Driver
@@ -9,7 +10,9 @@ class DriverProfileSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(source="user.last_name", read_only=True)
     phone_number = serializers.CharField(source="user.phone_number", read_only=True)
     vehicle_type_name = serializers.CharField(source="vehicle_type.display_name", read_only=True, default="")
+    license_photo = serializers.SerializerMethodField()
     license_photo_url = serializers.SerializerMethodField()
+    profile_photo = serializers.SerializerMethodField()
     profile_photo_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -50,20 +53,24 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
+    def get_license_photo(self, obj):
+        if obj.license_photo:
+            return f"{settings.BASE_URL}/{obj.license_photo.url.lstrip('/')}"
+        return None
+
     def get_license_photo_url(self, obj):
         if obj.license_photo:
-            request = self.context.get("request")
-            if request:
-                return request.build_absolute_uri(obj.license_photo.url)
-            return obj.license_photo.url
+            return f"{settings.BASE_URL}/{obj.license_photo.url.lstrip('/')}"
+        return None
+
+    def get_profile_photo(self, obj):
+        if obj.profile_photo:
+            return f"{settings.BASE_URL}/{obj.profile_photo.url.lstrip('/')}"
         return None
 
     def get_profile_photo_url(self, obj):
         if obj.profile_photo:
-            request = self.context.get("request")
-            if request:
-                return request.build_absolute_uri(obj.profile_photo.url)
-            return obj.profile_photo.url
+            return f"{settings.BASE_URL}/{obj.profile_photo.url.lstrip('/')}"
         return None
 
 
