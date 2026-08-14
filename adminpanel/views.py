@@ -96,6 +96,16 @@ def driver_approve(request, pk):
 
 @login_required
 @user_passes_test(is_admin)
+def driver_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    driver = get_object_or_404(Driver, pk=pk)
+    driver.delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_admin)
 def order_list(request):
     orders = CargoOrder.objects.select_related("customer").order_by("-created_at")
     return render(request, "adminpanel/orders.html", {"orders": orders})
