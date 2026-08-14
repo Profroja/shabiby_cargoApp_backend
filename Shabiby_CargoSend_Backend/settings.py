@@ -149,6 +149,8 @@ AUTH_USER_MODEL = 'auths.User'
 
 CORS_ALLOW_ALL_ORIGINS = True
 
+CSRF_TRUSTED_ORIGINS = ['http://213.199.45.120:8080', 'http://213.199.45.120']
+
 SMS_CONFIG = {
     "enabled": env.bool("SMS_ENABLED", default=False),
     "provider": env("SMS_PROVIDER", default="benter"),
