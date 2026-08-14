@@ -1,0 +1,150 @@
+{% extends "adminpanel/base.html" %}
+{% block title %}Driver Detail{% endblock %}
+{% block content %}
+<a href="{% url 'adminpanel:drivers' %}" class="text-decoration-none mb-3 d-inline-block">
+    <i class="bi bi-arrow-left"></i> Back to Drivers
+</a>
+<div class="row g-4">
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="card-body text-center">
+                {% if driver.profile_photo %}
+                <img src="{{ driver.profile_photo.url }}" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover;" alt="">
+                {% else %}
+                <div class="rounded-circle bg-secondary mx-auto mb-3 d-flex align-items-center justify-content-center text-white" style="width: 120px; height: 120px; font-size: 2rem;">
+                    {{ driver.user.first_name|slice:":1" }}
+                </div>
+                {% endif %}
+                <h4 class="mb-1">{{ driver.user.first_name }} {{ driver.user.middle_name }} {{ driver.user.last_name }}</h4>
+                <p class="text-muted mb-2">{{ driver.user.phone_number }}</p>
+                {% if driver.approval_status == 'pending' %}
+                <span class="badge badge-pending fs-6">Pending Approval</span>
+                {% elif driver.approval_status == 'approved' %}
+                <span class="badge badge-approved fs-6">Approved</span>
+                {% elif driver.approval_status == 'rejected' %}
+                <span class="badge badge-rejected fs-6">Rejected</span>
+                {% endif %}
+            </div>
+        </div>
+        {% if driver.license_photo %}
+        <div class="card stat-card mt-3">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">License ID Card Photo</h6>
+                <img src="{{ driver.license_photo.url }}" class="img-fluid rounded" alt="License">
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="col-md-8">
+        <div class="card stat-card mb-3">
+            <div class="card-body">
+                <h5 class="mb-3"><i class="bi bi-info-circle"></i> Driver Information</h5>
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted" style="width: 180px;">First Name</td>
+                        <td>{{ driver.user.first_name }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Middle Name</td>
+                        <td>{{ driver.user.middle_name|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Last Name</td>
+                        <td>{{ driver.user.last_name }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Phone Number</td>
+                        <td>{{ driver.user.phone_number }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">License Number</td>
+                        <td>{{ driver.license_number }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">National ID</td>
+                        <td>{{ driver.national_id_number|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Registered</td>
+                        <td>{{ driver.created_at|date:"M d, Y H:i" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div class="card stat-card mb-3">
+            <div class="card-body">
+                <h5 class="mb-3"><i class="bi bi-truck"></i> Vehicle Information</h5>
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted" style="width: 180px;">Vehicle Type</td>
+                        <td>{{ driver.vehicle_type.display_name|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Vehicle Name</td>
+                        <td>{{ driver.vehicle_name|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Vehicle Color</td>
+                        <td>{{ driver.vehicle_color|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">License Plate</td>
+                        <td><strong>{{ driver.license_plate }}</strong></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="card-body">
+                <h5 class="mb-3"><i class="bi bi-check-circle"></i> Approval Actions</h5>
+                {% if driver.approval_status == 'pending' %}
+                <div class="d-flex gap-2">
+                    <button class="btn btn-success" onclick="approveDriver('approved')">
+                        <i class="bi bi-check-lg"></i> Approve Driver
+                    </button>
+                    <button class="btn btn-danger" onclick="approveDriver('rejected')">
+                        <i class="bi bi-x-lg"></i> Reject Driver
+                    </button>
+                </div>
+                {% elif driver.approval_status == 'approved' %}
+                <div class="alert alert-success mb-0">
+                    <i class="bi bi-check-circle"></i> This driver has been approved.
+                </div>
+                <button class="btn btn-outline-danger mt-2" onclick="approveDriver('rejected')">
+                    <i class="bi bi-x-lg"></i> Revoke Approval
+                </button>
+                {% elif driver.approval_status == 'rejected' %}
+                <div class="alert alert-danger mb-0">
+                    <i class="bi bi-x-circle"></i> This driver has been rejected.
+                </div>
+                <button class="btn btn-outline-success mt-2" onclick="approveDriver('approved')">
+                    <i class="bi bi-check-lg"></i> Approve Anyway
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function approveDriver(status) {
+    fetch("{% url 'adminpanel:driver-approve' driver.id %}", {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": "{{ csrf_token }}",
+        },
+        body: new URLSearchParams({ approval_status: status }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            location.reload();
+        } else {
+            alert("Error: " + (data.error || "Unknown error"));
+        }
+    })
+    .catch(err => alert("Request failed: " + err));
+}
+</script>
+{% endblock %}

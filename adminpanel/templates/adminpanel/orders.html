@@ -1,0 +1,58 @@
+{% extends "adminpanel/base.html" %}
+{% block title %}Orders{% endblock %}
+{% block content %}
+<h2 class="mb-4">Orders</h2>
+<div class="card stat-card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Origin</th>
+                    <th>Destination</th>
+                    <th>Receiver</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td><small class="text-muted">{{ order.id|slice:":8" }}...</small></td>
+                    <td>{{ order.customer.first_name }} {{ order.customer.last_name }}</td>
+                    <td>{{ order.origin_station }}</td>
+                    <td>{{ order.destination_station }}</td>
+                    <td>
+                        {% if order.receiver_name %}
+                        {{ order.receiver_name }}<br>
+                        <small class="text-muted">{{ order.receiver_phone }}</small>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if order.status == 'submitted' %}
+                        <span class="badge bg-primary">Submitted</span>
+                        {% elif order.status == 'pending' %}
+                        <span class="badge bg-warning">Pending</span>
+                        {% elif order.status == 'pickup_in_progress' %}
+                        <span class="badge bg-info">Pickup</span>
+                        {% elif order.status == 'at_origin_station' %}
+                        <span class="badge bg-secondary">At Station</span>
+                        {% elif order.status == 'cancelled' %}
+                        <span class="badge bg-danger">Cancelled</span>
+                        {% else %}
+                        <span class="badge bg-light text-dark">{{ order.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ order.created_at|date:"M d, Y H:i" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center text-muted py-4">No orders yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

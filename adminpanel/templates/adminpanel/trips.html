@@ -1,0 +1,71 @@
+{% extends "adminpanel/base.html" %}
+{% block title %}Trips{% endblock %}
+{% block content %}
+<h2 class="mb-4">Trips</h2>
+<div class="card stat-card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Trip ID</th>
+                    <th>Customer</th>
+                    <th>Driver</th>
+                    <th>Leg Type</th>
+                    <th>Vehicle Type</th>
+                    <th>Pickup</th>
+                    <th>Destination</th>
+                    <th>Fare</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for trip in trips %}
+                <tr>
+                    <td><small class="text-muted">{{ trip.id|slice:":8" }}...</small></td>
+                    <td>{{ trip.order.customer.first_name }} {{ trip.order.customer.last_name }}</td>
+                    <td>
+                        {% if trip.driver %}
+                        {{ trip.driver.user.first_name }} {{ trip.driver.user.last_name }}
+                        {% else %}
+                        <span class="text-muted">Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ trip.leg_type|title }}</td>
+                    <td>
+                        {% if trip.vehicle_type == 1 %}Boda{% elif trip.vehicle_type == 2 %}Guta{% elif trip.vehicle_type == 3 %}Van{% else %}{{ trip.vehicle_type }}{% endif %}
+                    </td>
+                    <td>{{ trip.pickup_address_text|default:"—" }}</td>
+                    <td>{{ trip.destination_station }}</td>
+                    <td>{{ trip.fare_amount|default:"—" }}</td>
+                    <td>
+                        {% if trip.status == 'requested' %}
+                        <span class="badge bg-warning">Requested</span>
+                        {% elif trip.status == 'searching_driver' %}
+                        <span class="badge bg-info">Searching</span>
+                        {% elif trip.status == 'driver_assigned' %}
+                        <span class="badge bg-primary">Assigned</span>
+                        {% elif trip.status == 'en_route_to_pickup' %}
+                        <span class="badge bg-info">En Route</span>
+                        {% elif trip.status == 'arrived_at_pickup' %}
+                        <span class="badge bg-secondary">Arrived</span>
+                        {% elif trip.status == 'picked_up' %}
+                        <span class="badge bg-primary">Picked Up</span>
+                        {% elif trip.status == 'delivered_to_station' %}
+                        <span class="badge bg-success">Delivered</span>
+                        {% elif trip.status == 'cancelled' %}
+                        <span class="badge bg-danger">Cancelled</span>
+                        {% else %}
+                        <span class="badge bg-light text-dark">{{ trip.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ trip.created_at|date:"M d, Y H:i" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="10" class="text-center text-muted py-4">No trips yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
