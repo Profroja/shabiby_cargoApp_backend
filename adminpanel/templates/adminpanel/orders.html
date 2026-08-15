@@ -12,47 +12,109 @@
                     <th>Origin</th>
                     <th>Destination</th>
                     <th>Receiver</th>
+                    <th>Cargo Photo</th>
+                    <th>Shipping Fare</th>
                     <th>Status</th>
                     <th>Created</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for order in orders %}
-                <tr>
+                <tr style="cursor:pointer" onclick="window.location.href='/panel/orders/{{ order.id }}/'">
                     <td><small class="text-muted">{{ order.id|slice:":8" }}...</small></td>
                     <td>{{ order.customer.first_name }} {{ order.customer.last_name }}</td>
                     <td>{{ order.origin_station }}</td>
                     <td>{{ order.destination_station }}</td>
                     <td>
                         {% if order.receiver_name %}
-                        {{ order.receiver_name }}<br>
-                        <small class="text-muted">{{ order.receiver_phone }}</small>
+                            {{ order.receiver_name }}<br>
+                            <small class="text-muted">{{ order.receiver_phone }}</small>
                         {% else %}
                         —
                         {% endif %}
                     </td>
                     <td>
+                        {% if order.cargo_photo %}
+                            <a href="{{ order.cargo_photo.url }}" target="_blank" onclick="event.stopPropagation()">
+                                <img src="{{ order.cargo_photo.url }}" alt="Cargo" style="width:50px;height:50px;object-fit:cover;border-radius:6px;">
+                            </a>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if order.shipping_fare_status == 'priced' %}
+                            <span class="badge bg-success">TSh {{ order.shipping_fare }}</span>
+                        {% elif order.shipping_fare_status == 'paid' %}
+                            <span class="badge bg-primary">Paid: TSh {{ order.shipping_fare }}</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
                         {% if order.status == 'submitted' %}
-                        <span class="badge bg-primary">Submitted</span>
+                            <span class="badge bg-primary">Submitted</span>
                         {% elif order.status == 'pending' %}
-                        <span class="badge bg-warning">Pending</span>
+                            <span class="badge bg-warning">Pending</span>
                         {% elif order.status == 'pickup_in_progress' %}
-                        <span class="badge bg-info">Pickup</span>
+                            <span class="badge bg-info">Pickup</span>
                         {% elif order.status == 'at_origin_station' %}
-                        <span class="badge bg-secondary">At Station</span>
+                            <span class="badge bg-secondary">At Station</span>
                         {% elif order.status == 'cancelled' %}
-                        <span class="badge bg-danger">Cancelled</span>
+                            <span class="badge bg-danger">Cancelled</span>
                         {% else %}
                         <span class="badge bg-light text-dark">{{ order.status }}</span>
                         {% endif %}
                     </td>
                     <td>{{ order.created_at|date:"M d, Y H:i" }}</td>
+                    <td onclick="event.stopPropagation()">
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteOrder('{{ order.id }}')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="text-center text-muted py-4">No orders yet.</td></tr>
+                <tr><td colspan="10" class="text-center text-muted py-4">No orders yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
+<script>
+function deleteOrder(orderId) {
+    if (!confirm('Are you sure you want to delete this order? This will also delete all related trips. This action cannot be undone.')) return;
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+    fetch(`/panel/orders/${orderId}/delete/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.ok) {
+            alert('Order deleted successfully.');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to delete order'));
+        }
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
 {% endblock %}

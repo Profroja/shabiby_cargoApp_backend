@@ -11,6 +11,11 @@ class CargoOrder(models.Model):
         AT_ORIGIN_STATION = "at_origin_station", "At Origin Station"
         CANCELLED = "cancelled", "Cancelled"
 
+    class ShippingFareStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PRICED = "priced", "Priced"
+        PAID = "paid", "Paid"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     customer = models.ForeignKey(
         "auths.User", on_delete=models.CASCADE, related_name="orders"
@@ -23,9 +28,18 @@ class CargoOrder(models.Model):
     )
     description = models.TextField(blank=True, default="")
     notes = models.TextField(blank=True, default="")
+    cargo_photo = models.ImageField(upload_to="cargo_photos/", null=True, blank=True)
     receiver_name = models.CharField(max_length=150, blank=True, default="")
     receiver_phone = models.CharField(max_length=20, blank=True, default="")
     receiver_address = models.TextField(blank=True, default="")
+    shipping_fare = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    shipping_fare_status = models.CharField(
+        max_length=20,
+        choices=ShippingFareStatus.choices,
+        default=ShippingFareStatus.PENDING,
+    )
     status = models.CharField(
         max_length=25, choices=Status.choices, default=Status.SUBMITTED
     )

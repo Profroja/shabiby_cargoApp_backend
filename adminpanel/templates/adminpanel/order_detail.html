@@ -1,0 +1,292 @@
+{% extends "adminpanel/base.html" %}
+{% block title %}Order Detail{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Order Detail</h2>
+    <a href="{% url 'adminpanel:orders' %}" class="btn btn-outline-secondary btn-sm">← Back to Orders</a>
+</div>
+
+<div class="row">
+    <!-- Left column: Order info -->
+    <div class="col-md-7">
+        <div class="card stat-card mb-3">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Customer & Route</h5>
+                <table class="table table-sm mb-0">
+                    <tr>
+                        <th style="width:160px">Order ID</th>
+                        <td>{{ order.id }}</td>
+                    </tr>
+                    <tr>
+                        <th>Customer</th>
+                        <td>{{ order.customer.first_name }} {{ order.customer.last_name }}</td>
+                    </tr>
+                    <tr>
+                        <th>Customer Phone</th>
+                        <td>{{ order.customer.phone_number }}</td>
+                    </tr>
+                    <tr>
+                        <th>Origin Station</th>
+                        <td>{{ order.origin_station }}</td>
+                    </tr>
+                    <tr>
+                        <th>Destination Station</th>
+                        <td>{{ order.destination_station }}</td>
+                    </tr>
+                    <tr>
+                        <th>Cargo Size</th>
+                        <td>{{ order.cargo_size }}</td>
+                    </tr>
+                    <tr>
+                        <th>Estimated Weight</th>
+                        <td>{{ order.estimated_weight_kg|default:"—" }} kg</td>
+                    </tr>
+                    <tr>
+                        <th>Description</th>
+                        <td>{{ order.description|default:"—" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="card stat-card mb-3">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Receiver Info</h5>
+                <table class="table table-sm mb-0">
+                    <tr>
+                        <th style="width:160px">Receiver Name</th>
+                        <td>{{ order.receiver_name|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Receiver Phone</th>
+                        <td>{{ order.receiver_phone|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Receiver Address</th>
+                        <td>{{ order.receiver_address|default:"—" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="card stat-card mb-3">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Order Status</h5>
+                <table class="table table-sm mb-0">
+                    <tr>
+                        <th style="width:160px">Status</th>
+                        <td>
+                            {% if order.status == 'submitted' %}
+                            <span class="badge bg-primary">Submitted</span>
+                            {% elif order.status == 'pickup_in_progress' %}
+                            <span class="badge bg-info">Pickup In Progress</span>
+                            {% elif order.status == 'at_origin_station' %}
+                            <span class="badge bg-secondary">At Origin Station</span>
+                            {% elif order.status == 'cancelled' %}
+                            <span class="badge bg-danger">Cancelled</span>
+                            {% else %}
+                            <span class="badge bg-light text-dark">{{ order.status }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Created</th>
+                        <td>{{ order.created_at|date:"M d, Y H:i" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Updated</th>
+                        <td>{{ order.updated_at|date:"M d, Y H:i" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="card stat-card mb-3">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Pickup Fare (Customer → Cargo Station)</h5>
+                <table class="table table-sm mb-0">
+                    <tr>
+                        <th style="width:160px">Pickup Address</th>
+                        <td>{{ pickup_trip.pickup_address_text|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Distance</th>
+                        <td>{% if pickup_trip.distance_km %}{{ pickup_trip.distance_km }} km{% else %}—{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <th>Pickup Fare</th>
+                        <td>
+                            {% if pickup_trip.fare_amount %}
+                            <span class="badge bg-success fs-6">TSh {{ pickup_trip.fare_amount }}</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Not set</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Trip Status</th>
+                        <td>
+                            {% if pickup_trip.status == 'searching_driver' %}
+                            <span class="badge bg-info">Searching Driver</span>
+                            {% elif pickup_trip.status == 'driver_assigned' %}
+                            <span class="badge bg-primary">Driver Assigned</span>
+                            {% elif pickup_trip.status == 'en_route_to_pickup' %}
+                            <span class="badge bg-primary">En Route to Pickup</span>
+                            {% elif pickup_trip.status == 'arrived_at_pickup' %}
+                            <span class="badge bg-info">Arrived at Pickup</span>
+                            {% elif pickup_trip.status == 'picked_up' %}
+                            <span class="badge bg-warning text-dark">Picked Up</span>
+                            {% elif pickup_trip.status == 'delivered_to_station' %}
+                            <span class="badge bg-success">Delivered to Station</span>
+                            {% elif pickup_trip.status == 'cancelled' %}
+                            <span class="badge bg-danger">Cancelled</span>
+                            {% else %}
+                            <span class="badge bg-light text-dark">{{ pickup_trip.status|default:"—" }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: Cargo photo + shipping fare -->
+    <div class="col-md-5">
+        <div class="card stat-card mb-3">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Cargo Photo</h5>
+                {% if order.cargo_photo %}
+                <div class="text-center">
+                    <a href="{{ order.cargo_photo.url }}" target="_blank">
+                        <img src="{{ order.cargo_photo.url }}" alt="Cargo Photo" class="img-fluid rounded" style="max-height:300px;">
+                    </a>
+                    <p class="text-muted mt-2"><small>Click to view full size</small></p>
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-4">No cargo photo uploaded.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card stat-card">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Shipping Fare</h5>
+                <div id="fare-status-box">
+                    {% if order.shipping_fare_status == 'priced' %}
+                    <div class="alert alert-success">
+                        <strong>Fare Set:</strong> TSh {{ order.shipping_fare }}
+                    </div>
+                    {% elif order.shipping_fare_status == 'paid' %}
+                    <div class="alert alert-primary">
+                        <strong>Paid:</strong> TSh {{ order.shipping_fare }}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <strong>Pending:</strong> Shipping fare has not been set yet.
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if order.shipping_fare_status == 'pending' %}
+                <form id="set-fare-form" onsubmit="return submitFare(event, '{{ order.id }}')">
+                    <div class="mb-3">
+                        <label class="form-label">Set Shipping Fare (TSh)</label>
+                        <input type="number" class="form-control" id="shipping_fare" name="shipping_fare" placeholder="e.g. 15000" step="0.01" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Set Shipping Fare</button>
+                </form>
+                {% endif %}
+
+                {% if order.shipping_fare_status == 'priced' %}
+                <div class="mt-3">
+                    <p class="text-muted"><small>Customer will be notified of the shipping fare. The fare can be updated if needed.</small></p>
+                    <form id="update-fare-form" onsubmit="return submitFare(event, '{{ order.id }}')">
+                        <div class="mb-3">
+                            <label class="form-label">Update Shipping Fare (TSh)</label>
+                            <input type="number" class="form-control" id="shipping_fare" name="shipping_fare" value="{{ order.shipping_fare }}" step="0.01" required>
+                        </div>
+                        <button type="submit" class="btn btn-outline-primary w-100">Update Fare</button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+    <div class="card stat-card mt-3 border-danger">
+        <div class="card-body">
+            <h5 class="card-title text-danger mb-3">Danger Zone</h5>
+            <p class="text-muted small mb-3">Deleting this order will also remove all related trips. This action cannot be undone.</p>
+            <button class="btn btn-danger w-100" onclick="deleteOrder('{{ order.id }}')">
+                <i class="bi bi-trash"></i> Delete Order
+            </button>
+        </div>
+    </div>
+
+
+<script>
+function submitFare(event, orderId) {
+    event.preventDefault();
+    const fare = document.getElementById('shipping_fare').value;
+    if (!fare) return false;
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+
+    fetch(`/panel/orders/${orderId}/set-fare/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken,
+        },
+        body: `shipping_fare=${encodeURIComponent(fare)}`,
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.ok) {
+            alert('Shipping fare set to TSh ' + data.shipping_fare);
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to set fare'));
+        }
+    })
+    .catch(err => alert('Network error: ' + err));
+    return false;
+}
+
+function deleteOrder(orderId) {
+    if (!confirm('Are you sure you want to delete this order? This will also delete all related trips. This action cannot be undone.')) return;
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+    fetch(`/panel/orders/${orderId}/delete/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.ok) {
+            alert('Order deleted successfully.');
+            window.location.href = '/panel/orders/';
+        } else {
+            alert('Error: ' + (data.error || 'Failed to delete order'));
+        }
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}

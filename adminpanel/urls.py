@@ -14,5 +14,8 @@ urlpatterns = [
     path("drivers/<uuid:pk>/approve/", views.driver_approve, name="driver-approve"),
     path("drivers/<uuid:pk>/delete/", views.driver_delete, name="driver-delete"),
     path("orders/", views.order_list, name="orders"),
+    path("orders/<uuid:pk>/", views.order_detail, name="order-detail"),
+    path("orders/<uuid:pk>/set-fare/", views.order_set_fare, name="order-set-fare"),
+    path("orders/<uuid:pk>/delete/", views.order_delete, name="order-delete"),
     path("trips/", views.trip_list, name="trips"),
 ]

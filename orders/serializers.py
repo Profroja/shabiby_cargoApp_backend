@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 
 from stations.views import _fetch_cargo_centers
@@ -15,6 +16,7 @@ def _get_center_map():
 class CargoOrderSerializer(serializers.ModelSerializer):
     origin_station = serializers.CharField()
     destination_station = serializers.CharField()
+    cargo_photo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = CargoOrder
@@ -27,14 +29,23 @@ class CargoOrderSerializer(serializers.ModelSerializer):
             "estimated_weight_kg",
             "description",
             "notes",
+            "cargo_photo",
+            "cargo_photo_url",
             "receiver_name",
             "receiver_phone",
             "receiver_address",
+            "shipping_fare",
+            "shipping_fare_status",
             "status",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("customer", "status", "created_at", "updated_at")
+        read_only_fields = ("customer", "status", "shipping_fare", "shipping_fare_status", "created_at", "updated_at")
+
+    def get_cargo_photo_url(self, obj):
+        if obj.cargo_photo:
+            return f"{settings.BASE_URL}/{obj.cargo_photo.url.lstrip('/')}"
+        return None
 
     def _get_center(self, station_id, centers):
         c = centers.get(str(station_id))

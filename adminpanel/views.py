@@ -118,6 +118,43 @@ def order_list(request):
 
 @login_required
 @user_passes_test(is_admin)
+def order_detail(request, pk):
+    order = get_object_or_404(CargoOrder.objects.select_related("customer"), pk=pk)
+    pickup_trip = CargoTrip.objects.filter(order=order, leg_type=CargoTrip.LegType.PICKUP).first()
+    return render(request, "adminpanel/order_detail.html", {"order": order, "pickup_trip": pickup_trip})
+
+
+@login_required
+@user_passes_test(is_admin)
+def order_set_fare(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    order = get_object_or_404(CargoOrder, pk=pk)
+    fare = request.POST.get("shipping_fare")
+    if not fare:
+        return JsonResponse({"error": "shipping_fare is required"}, status=400)
+    try:
+        from decimal import Decimal, InvalidOperation
+        order.shipping_fare = Decimal(str(fare))
+    except (InvalidOperation, ValueError):
+        return JsonResponse({"error": "Invalid fare amount"}, status=400)
+    order.shipping_fare_status = CargoOrder.ShippingFareStatus.PRICED
+    order.save(update_fields=["shipping_fare", "shipping_fare_status", "updated_at"])
+    return JsonResponse({"ok": True, "shipping_fare": str(order.shipping_fare), "shipping_fare_status": order.shipping_fare_status})
+
+
+@login_required
+@user_passes_test(is_admin)
 def trip_list(request):
     trips = CargoTrip.objects.select_related("order", "order__customer", "driver", "driver__user").order_by("-created_at")
     return render(request, "adminpanel/trips.html", {"trips": trips})
+
+
+@login_required
+@user_passes_test(is_admin)
+def order_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    order = get_object_or_404(CargoOrder, pk=pk)
+    order.delete()
+    return JsonResponse({"ok": True})
