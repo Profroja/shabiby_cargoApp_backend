@@ -24,8 +24,8 @@
                 <tr style="cursor:pointer" onclick="window.location.href='/panel/orders/{{ order.id }}/'">
                     <td><small class="text-muted">{{ order.id|slice:":8" }}...</small></td>
                     <td>{{ order.customer.first_name }} {{ order.customer.last_name }}</td>
-                    <td>{{ order.origin_station }}</td>
-                    <td>{{ order.destination_station }}</td>
+                    <td>{{ order.origin_station_name }}</td>
+                    <td>{{ order.destination_station_name }}</td>
                     <td>
                         {% if order.receiver_name %}
                             {{ order.receiver_name }}<br>

@@ -6,7 +6,18 @@ from django.http import JsonResponse
 from auths.models import User
 from drivers.models import Driver
 from orders.models import CargoOrder
+from stations.views import _fetch_cargo_centers
 from trips.models import CargoTrip
+
+
+def _get_station_name_map():
+    data = _fetch_cargo_centers(active_only=False)
+    if not data:
+        return {}
+    return {
+        str(item.get("id")): item.get("center_name", "") or item.get("name", "")
+        for item in data
+    }
 
 
 def is_admin(user):
@@ -125,6 +136,10 @@ def driver_delete(request, pk):
 @user_passes_test(is_admin)
 def order_list(request):
     orders = CargoOrder.objects.select_related("customer").order_by("-created_at")
+    station_map = _get_station_name_map()
+    for order in orders:
+        order.origin_station_name = station_map.get(str(order.origin_station), order.origin_station)
+        order.destination_station_name = station_map.get(str(order.destination_station), order.destination_station)
     return render(request, "adminpanel/orders.html", {"orders": orders})
 
 
@@ -133,6 +148,9 @@ def order_list(request):
 def order_detail(request, pk):
     order = get_object_or_404(CargoOrder.objects.select_related("customer"), pk=pk)
     pickup_trip = CargoTrip.objects.filter(order=order, leg_type=CargoTrip.LegType.PICKUP).first()
+    station_map = _get_station_name_map()
+    order.origin_station_name = station_map.get(str(order.origin_station), order.origin_station)
+    order.destination_station_name = station_map.get(str(order.destination_station), order.destination_station)
     return render(request, "adminpanel/order_detail.html", {"order": order, "pickup_trip": pickup_trip})
 
 
