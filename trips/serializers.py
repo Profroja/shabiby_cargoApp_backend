@@ -15,6 +15,15 @@ def _get_center_map():
 class CargoTripSerializer(serializers.ModelSerializer):
     destination_station = serializers.CharField()
     vehicle_type = serializers.IntegerField()
+    pickup_latitude = serializers.DecimalField(
+        max_digits=10, decimal_places=7, coerce_to_string=False
+    )
+    pickup_longitude = serializers.DecimalField(
+        max_digits=10, decimal_places=7, coerce_to_string=False
+    )
+    distance_km = serializers.DecimalField(
+        max_digits=8, decimal_places=2, coerce_to_string=False
+    )
     driver_name = serializers.SerializerMethodField()
     driver_phone = serializers.SerializerMethodField()
     driver_photo_url = serializers.SerializerMethodField()
@@ -25,6 +34,11 @@ class CargoTripSerializer(serializers.ModelSerializer):
     driver_vehicle_plate = serializers.SerializerMethodField()
     customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
+    shipping_fare = serializers.SerializerMethodField()
+    origin_station_name = serializers.SerializerMethodField()
+    cargo_description = serializers.SerializerMethodField()
+    cargo_weight_kg = serializers.SerializerMethodField()
+    cargo_size_name = serializers.SerializerMethodField()
 
     class Meta:
         model = CargoTrip
@@ -59,11 +73,14 @@ class CargoTripSerializer(serializers.ModelSerializer):
             "driver_vehicle_plate",
             "customer_name",
             "customer_phone",
+            "shipping_fare",
+            "origin_station_name",
+            "cargo_description",
+            "cargo_weight_kg",
+            "cargo_size_name",
         )
         read_only_fields = (
             "driver",
-            "fare_amount",
-            "status",
             "requested_at",
             "driver_assigned_at",
             "arrived_at_pickup_at",
@@ -123,12 +140,55 @@ class CargoTripSerializer(serializers.ModelSerializer):
     def get_customer_phone(self, obj):
         return obj.order.customer.phone_number
 
+    def get_shipping_fare(self, obj):
+        if obj.order.shipping_fare:
+            return str(obj.order.shipping_fare)
+        return None
+
+    def get_cargo_description(self, obj):
+        return obj.order.description or ""
+
+    def get_cargo_weight_kg(self, obj):
+        if obj.order.estimated_weight_kg:
+            return str(obj.order.estimated_weight_kg)
+        return None
+
+    def get_cargo_size_name(self, obj):
+        from cargosizes.models import CargoSize
+        try:
+            cs = CargoSize.objects.get(id=obj.order.cargo_size)
+            return cs.name
+        except (CargoSize.DoesNotExist, ValueError, TypeError):
+            return None
+
+    def get_origin_station_name(self, obj):
+        centers = _get_center_map()
+        c = centers.get(str(obj.order.origin_station))
+        if c:
+            return c.get("center_name", "") or c.get("name", "")
+        return obj.order.origin_station
+
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         centers = self.context.get("_center_map")
         if centers is None:
             centers = _get_center_map()
         c = centers.get(str(instance.destination_station))
+        
+        # Try to get coordinates from local CargoStation model
+        latitude = None
+        longitude = None
+        try:
+            from stations.models import CargoStation
+            local_station = CargoStation.objects.filter(
+                branch_code=c.get("branch_code") if c else None
+            ).first()
+            if local_station:
+                latitude = float(local_station.latitude) if local_station.latitude else None
+                longitude = float(local_station.longitude) if local_station.longitude else None
+        except Exception:
+            pass
+        
         if c:
             ret["destination_station"] = {
                 "id": c.get("id"),
@@ -137,6 +197,8 @@ class CargoTripSerializer(serializers.ModelSerializer):
                 "location": c.get("location", ""),
                 "branch_code": c.get("branch_code", ""),
                 "is_active": c.get("is_active", True),
+                "latitude": latitude,
+                "longitude": longitude,
             }
         else:
             ret["destination_station"] = {
@@ -145,5 +207,7 @@ class CargoTripSerializer(serializers.ModelSerializer):
                 "center_name": "",
                 "branch_code": "",
                 "is_active": True,
+                "latitude": None,
+                "longitude": None,
             }
         return ret

@@ -34,8 +34,8 @@ class CargoTrip(models.Model):
         related_name="trips",
     )
     vehicle_type = models.IntegerField(default=1)
-    pickup_latitude = models.DecimalField(max_digits=9, decimal_places=6)
-    pickup_longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    pickup_latitude = models.DecimalField(max_digits=10, decimal_places=7)
+    pickup_longitude = models.DecimalField(max_digits=10, decimal_places=7)
     pickup_address_text = models.TextField(blank=True, default="")
     destination_station = models.CharField(max_length=50)
     distance_km = models.DecimalField(
@@ -65,3 +65,16 @@ class CargoTrip(models.Model):
 
     def __str__(self):
         return f"Trip {self.id} — {self.leg_type} / {self.status}"
+    
+    def get_destination_name(self):
+        """Get the cargo center name for the destination station."""
+        from stations.views import _fetch_cargo_centers
+        centers = _fetch_cargo_centers(active_only=False)
+        if not centers:
+            return self.destination_station
+        
+        for center in centers:
+            if str(center.get("id")) == str(self.destination_station):
+                return center.get("center_name", "") or center.get("name", "")
+        
+        return self.destination_station

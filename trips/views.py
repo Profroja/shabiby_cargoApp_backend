@@ -1,4 +1,5 @@
 from datetime import timezone
+import logging
 
 from django.db.models import Q
 from django.utils import timezone as tz_utils
@@ -13,12 +14,22 @@ from orders.models import CargoOrder
 from .models import CargoTrip
 from .serializers import CargoTripSerializer
 
+logger = logging.getLogger(__name__)
+
 
 class CargoTripListView(generics.ListCreateAPIView):
     serializer_class = CargoTripSerializer
 
     def get_queryset(self):
         return CargoTrip.objects.filter(order__customer=self.request.user).order_by("-created_at")
+
+    def create(self, request, *args, **kwargs):
+        logger.error(f"[CargoTripListView] POST data: {request.data}")
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"[CargoTripListView] Error creating trip: {e}")
+            raise
 
 
 class CargoTripDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -39,12 +50,16 @@ class DriverAvailableTripsView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        logger.error(f"[DriverAvailableTripsView] User: {self.request.user.phone_number}, Role: {self.request.user.role}")
         if self.request.user.role != "driver":
+            logger.error(f"[DriverAvailableTripsView] User is not a driver, returning empty queryset")
             return CargoTrip.objects.none()
-        return CargoTrip.objects.filter(
+        trips = CargoTrip.objects.filter(
             driver__isnull=True,
             status__in=["requested", "searching_driver"],
         ).select_related("order", "order__customer").order_by("-created_at")
+        logger.error(f"[DriverAvailableTripsView] Found {trips.count()} available trips")
+        return trips
 
 
 class DriverMyTripsView(generics.ListAPIView):
@@ -206,9 +221,16 @@ def trip_status(request, pk):
     """Customer polls trip status with driver location. Returns full trip + driver info."""
     trip = CargoTrip.objects.filter(pk=pk, order__customer=request.user).first()
     if not trip:
-        # Also allow driver to poll
+        # Also allow driver to poll: own assigned trips or any still-available trip
         if request.user.role == "driver":
-            trip = CargoTrip.objects.filter(pk=pk, driver__user=request.user).first()
+            trip = (
+                CargoTrip.objects.filter(pk=pk, driver__user=request.user).first()
+                or CargoTrip.objects.filter(
+                    pk=pk,
+                    driver__isnull=True,
+                    status__in=["requested", "searching_driver"],
+                ).first()
+            )
         if not trip:
             return Response({"error": "Trip not found."}, status=status.HTTP_404_NOT_FOUND)
 

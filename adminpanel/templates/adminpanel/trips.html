@@ -35,8 +35,14 @@
                     <td>
                         {% if trip.vehicle_type == 1 %}Boda{% elif trip.vehicle_type == 2 %}Guta{% elif trip.vehicle_type == 3 %}Van{% else %}{{ trip.vehicle_type }}{% endif %}
                     </td>
-                    <td>{{ trip.pickup_address_text|default:"—" }}</td>
-                    <td>{{ trip.destination_station }}</td>
+                    <td>
+                        {% if trip.pickup_latitude and trip.pickup_longitude %}
+                        <small>{{ trip.pickup_latitude }}, {{ trip.pickup_longitude }}</small>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ trip.get_destination_name|default:trip.destination_station }}</td>
                     <td>{{ trip.fare_amount|default:"—" }}</td>
                     <td>
                         {% if trip.status == 'requested' %}

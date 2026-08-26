@@ -69,6 +69,18 @@ def customer_list(request):
 
 @login_required
 @user_passes_test(is_admin)
+def customer_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    customer = get_object_or_404(User, pk=pk)
+    if customer.role == "admin":
+        return JsonResponse({"error": "Cannot delete admin user"}, status=400)
+    customer.delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_admin)
 def driver_list(request):
     status_filter = request.GET.get("status", "")
     drivers = Driver.objects.select_related("user", "vehicle_type").order_by("-created_at")

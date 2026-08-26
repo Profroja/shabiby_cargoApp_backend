@@ -9,6 +9,7 @@ urlpatterns = [
     path("logout/", views.admin_logout, name="logout"),
     path("", views.dashboard, name="dashboard"),
     path("customers/", views.customer_list, name="customers"),
+    path("customers/<uuid:pk>/delete/", views.customer_delete, name="customer-delete"),
     path("drivers/", views.driver_list, name="drivers"),
     path("drivers/<uuid:pk>/", views.driver_detail, name="driver-detail"),
     path("drivers/<uuid:pk>/approve/", views.driver_approve, name="driver-approve"),

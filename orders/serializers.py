@@ -17,6 +17,7 @@ class CargoOrderSerializer(serializers.ModelSerializer):
     origin_station = serializers.CharField()
     destination_station = serializers.CharField()
     cargo_photo_url = serializers.SerializerMethodField()
+    pickup_fare = serializers.SerializerMethodField()
 
     class Meta:
         model = CargoOrder
@@ -36,15 +37,22 @@ class CargoOrderSerializer(serializers.ModelSerializer):
             "receiver_address",
             "shipping_fare",
             "shipping_fare_status",
+            "pickup_fare",
             "status",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("customer", "status", "shipping_fare", "shipping_fare_status", "created_at", "updated_at")
+        read_only_fields = ("customer", "status", "shipping_fare", "shipping_fare_status", "pickup_fare", "created_at", "updated_at")
 
     def get_cargo_photo_url(self, obj):
         if obj.cargo_photo:
             return f"{settings.BASE_URL}/{obj.cargo_photo.url.lstrip('/')}"
+        return None
+
+    def get_pickup_fare(self, obj):
+        trip = obj.trips.first()
+        if trip and trip.fare_amount:
+            return str(trip.fare_amount)
         return None
 
     def _get_center(self, station_id, centers):
