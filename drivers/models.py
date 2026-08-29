@@ -55,3 +55,6 @@ class Driver(models.Model):
 
     def __str__(self):
         return f"Driver {self.user.first_name} {self.user.last_name} — {self.license_plate}"
+
+
+from .rating_models import DriverRating  # noqa: E402,F401

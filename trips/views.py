@@ -239,6 +239,56 @@ def update_driver_location(request):
     return Response({"ok": True}, status=status.HTTP_200_OK)
 
 
+# ---------- Customer rating API ----------
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def rate_driver(request, pk):
+    """Customer rates the driver after trip delivery.
+    pk is the trip ID."""
+    if request.user.role != "customer":
+        return Response({"error": "Customer access required."}, status=status.HTTP_403_FORBIDDEN)
+
+    trip = CargoTrip.objects.filter(pk=pk, order__customer=request.user).first()
+    if not trip:
+        return Response({"error": "Trip not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    if not trip.driver:
+        return Response({"error": "No driver assigned to this trip."}, status=status.HTTP_400_BAD_REQUEST)
+
+    if trip.status not in ["delivered_to_station", "cancelled"]:
+        return Response({"error": "Trip must be delivered before rating."}, status=status.HTTP_400_BAD_REQUEST)
+
+    from drivers.rating_models import DriverRating
+
+    # Check if already rated
+    existing = DriverRating.objects.filter(trip=trip, customer=request.user).first()
+    if existing:
+        return Response({"error": "You have already rated this trip."}, status=status.HTTP_400_BAD_REQUEST)
+
+    stars = request.data.get("stars")
+    comment = request.data.get("comment", "")
+
+    if stars is None or not isinstance(stars, (int, float)) or stars < 1 or stars > 5:
+        return Response({"error": "stars must be a number between 1 and 5."}, status=status.HTTP_400_BAD_REQUEST)
+
+    rating = DriverRating.objects.create(
+        driver=trip.driver,
+        trip=trip,
+        customer=request.user,
+        stars=int(stars),
+        comment=str(comment).strip(),
+    )
+
+    return Response({
+        "id": str(rating.id),
+        "stars": rating.stars,
+        "comment": rating.comment,
+        "driver_rating_avg": float(trip.driver.rating_avg),
+        "driver_rating_count": trip.driver.rating_count,
+    }, status=status.HTTP_201_CREATED)
+
+
 # ---------- Customer trip polling API ----------
 
 @api_view(["GET"])
