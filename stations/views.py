@@ -35,29 +35,32 @@ def _fetch_cargo_centers(active_only=True):
     if not token:
         return None
 
-    url = f"{EXTERNAL_API_BASE}/cargo-centers/"
-    if not active_only:
-        url += "?active_only=false"
+    # Try /stations/ first (has latitude/longitude), fall back to /cargo-centers/
+    for endpoint in ["/stations/", "/cargo-centers/"]:
+        url = f"{EXTERNAL_API_BASE}{endpoint}"
+        if not active_only:
+            url += "?active_only=false"
 
-    try:
-        resp = requests.get(
-            url,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        if resp.status_code == 401:
-            token = _get_external_token()
-            if not token:
-                return None
+        try:
             resp = requests.get(
                 url,
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=10,
             )
-        if resp.status_code == 200:
-            return resp.json()
-    except Exception as e:
-        logger.error(f"External API fetch failed: {e}")
+            if resp.status_code == 401:
+                token = _get_external_token()
+                if not token:
+                    return None
+                resp = requests.get(
+                    url,
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=10,
+                )
+            if resp.status_code == 200:
+                return resp.json()
+        except Exception as e:
+            logger.error(f"External API fetch from {endpoint} failed: {e}")
+            continue
     return None
 
 
@@ -84,6 +87,8 @@ class CargoCenterListView(generics.GenericAPIView):
                 "location": item.get("location", ""),
                 "branch_code": item.get("branch_code", ""),
                 "is_active": item.get("is_active", True),
+                "latitude": item.get("latitude"),
+                "longitude": item.get("longitude"),
                 "created_at": item.get("created_at"),
                 "updated_at": item.get("updated_at"),
             })
@@ -108,6 +113,8 @@ class CargoCenterDetailView(generics.GenericAPIView):
                     "location": item.get("location", ""),
                     "branch_code": item.get("branch_code", ""),
                     "is_active": item.get("is_active", True),
+                    "latitude": item.get("latitude"),
+                    "longitude": item.get("longitude"),
                     "created_at": item.get("created_at"),
                     "updated_at": item.get("updated_at"),
                 })
