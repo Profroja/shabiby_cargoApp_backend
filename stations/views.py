@@ -64,6 +64,14 @@ def _fetch_cargo_centers(active_only=True):
     return None
 
 
+def _get_center_map():
+    """Return a dict mapping station ID (str) -> raw station data from external API."""
+    data = _fetch_cargo_centers(active_only=False)
+    if not data:
+        return {}
+    return {str(item.get("id")): item for item in data}
+
+
 class CargoCenterListView(generics.GenericAPIView):
     def get(self, request):
         active_only = request.query_params.get("active_only", "true")
