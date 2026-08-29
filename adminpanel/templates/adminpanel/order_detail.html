@@ -124,6 +124,16 @@
                         </td>
                     </tr>
                     <tr>
+                        <th>Driver Commission</th>
+                        <td>
+                            {% if commission_percent is not None and commission_amount is not None %}
+                            <span class="badge bg-info fs-6">TSh {{ commission_amount }} ({{ commission_percent }}%)</span>
+                            {% else %}
+                            <span class="badge bg-light text-dark">No active band</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
                         <th>Trip Status</th>
                         <td>
                             {% if pickup_trip.status == 'searching_driver' %}

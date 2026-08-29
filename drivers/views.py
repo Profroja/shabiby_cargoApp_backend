@@ -73,6 +73,7 @@ class DriverRegisterView(generics.CreateAPIView):
             license_number=data["license_number"],
             license_photo=data["license_photo"],
             profile_photo=data["profile_photo"],
+            region=data.get("region", ""),
         )
 
         # Issue fresh JWT tokens

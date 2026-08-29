@@ -4,6 +4,7 @@ from django.shortcuts import redirect, render, get_object_or_404
 from django.http import JsonResponse
 
 from auths.models import User
+from commissions.models import DriverCommissionBand, get_driver_commission
 from drivers.models import Driver
 from orders.models import CargoOrder
 from stations.views import _fetch_cargo_centers
@@ -151,7 +152,24 @@ def order_detail(request, pk):
     station_map = _get_station_name_map()
     order.origin_station_name = station_map.get(str(order.origin_station), order.origin_station)
     order.destination_station_name = station_map.get(str(order.destination_station), order.destination_station)
-    return render(request, "adminpanel/order_detail.html", {"order": order, "pickup_trip": pickup_trip})
+
+    commission_percent = None
+    commission_amount = None
+    if pickup_trip:
+        commission_percent, commission_amount = get_driver_commission(
+            pickup_trip.distance_km, pickup_trip.fare_amount
+        )
+
+    return render(
+        request,
+        "adminpanel/order_detail.html",
+        {
+            "order": order,
+            "pickup_trip": pickup_trip,
+            "commission_percent": commission_percent,
+            "commission_amount": commission_amount,
+        },
+    )
 
 
 @login_required
@@ -187,4 +205,92 @@ def order_delete(request, pk):
         return JsonResponse({"error": "POST required"}, status=405)
     order = get_object_or_404(CargoOrder, pk=pk)
     order.delete()
+    return JsonResponse({"ok": True})
+
+
+def _parse_commission_form(post):
+    """Return (min_distance, max_distance, percent, is_active) or raise ValueError."""
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        min_dist = str(post.get("min_distance_km", "")).strip()
+        max_dist = str(post.get("max_distance_km", "")).strip()
+        percent = str(post.get("commission_percent", "")).strip()
+        if not min_dist or not percent:
+            raise ValueError("min_distance_km and commission_percent are required.")
+        min_dec = Decimal(min_dist)
+        max_dec = Decimal(max_dist) if max_dist else None
+        per_dec = Decimal(percent)
+        if max_dec is not None and max_dec < min_dec:
+            raise ValueError("max_distance_km cannot be less than min_distance_km.")
+        if per_dec < 0:
+            raise ValueError("commission_percent must not be negative.")
+    except InvalidOperation:
+        raise ValueError("Invalid numeric values.")
+    return min_dec, max_dec, per_dec, post.get("is_active") == "on"
+
+
+@login_required
+@user_passes_test(is_admin)
+def commission_list(request):
+    bands = DriverCommissionBand.objects.all().order_by("min_distance_km")
+
+    if request.method == "POST":
+        try:
+            min_dec, max_dec, per_dec, is_active = _parse_commission_form(request.POST)
+        except ValueError as e:
+            return render(
+                request,
+                "adminpanel/commissions.html",
+                {"bands": bands, "error": str(e)},
+            )
+        DriverCommissionBand.objects.create(
+            min_distance_km=min_dec,
+            max_distance_km=max_dec,
+            commission_percent=per_dec,
+            is_active=is_active,
+        )
+        return redirect("adminpanel:commissions")
+
+    return render(request, "adminpanel/commissions.html", {"bands": bands})
+
+
+@login_required
+@user_passes_test(is_admin)
+def commission_edit(request, pk):
+    band = get_object_or_404(DriverCommissionBand, pk=pk)
+    if request.method == "POST":
+        try:
+            min_dec, max_dec, per_dec, is_active = _parse_commission_form(request.POST)
+        except ValueError as e:
+            return render(
+                request,
+                "adminpanel/commission_edit.html",
+                {"band": band, "error": str(e)},
+            )
+        band.min_distance_km = min_dec
+        band.max_distance_km = max_dec
+        band.commission_percent = per_dec
+        band.is_active = is_active
+        band.save(
+            update_fields=[
+                "min_distance_km",
+                "max_distance_km",
+                "commission_percent",
+                "is_active",
+                "updated_at",
+            ]
+        )
+        return redirect("adminpanel:commissions")
+
+    return render(request, "adminpanel/commission_edit.html", {"band": band})
+
+
+@login_required
+@user_passes_test(is_admin)
+def commission_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    band = get_object_or_404(DriverCommissionBand, pk=pk)
+    band.delete()
     return JsonResponse({"ok": True})

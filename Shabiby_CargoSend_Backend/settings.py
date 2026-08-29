@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'farezones',
     'stations',
     'farerates',
+    'commissions',
     'drivers',
     'orders',
     'trips',

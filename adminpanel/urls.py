@@ -19,4 +19,7 @@ urlpatterns = [
     path("orders/<uuid:pk>/set-fare/", views.order_set_fare, name="order-set-fare"),
     path("orders/<uuid:pk>/delete/", views.order_delete, name="order-delete"),
     path("trips/", views.trip_list, name="trips"),
+    path("commissions/", views.commission_list, name="commissions"),
+    path("commissions/<int:pk>/edit/", views.commission_edit, name="commission-edit"),
+    path("commissions/<int:pk>/delete/", views.commission_delete, name="commission-delete"),
 ]

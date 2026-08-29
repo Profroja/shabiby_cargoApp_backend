@@ -45,7 +45,8 @@ class CargoTripDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ---------- Driver trip APIs ----------
 
 class DriverAvailableTripsView(generics.ListAPIView):
-    """List trips with no driver assigned, available for the logged-in driver."""
+    """List trips with no driver assigned, available for the logged-in driver.
+    Filters by driver's region (nearest cargo center name)."""
     serializer_class = CargoTripSerializer
     permission_classes = [IsAuthenticated]
 
@@ -54,11 +55,35 @@ class DriverAvailableTripsView(generics.ListAPIView):
         if self.request.user.role != "driver":
             logger.error(f"[DriverAvailableTripsView] User is not a driver, returning empty queryset")
             return CargoTrip.objects.none()
+
+        try:
+            driver = self.request.user.driver
+        except Driver.DoesNotExist:
+            return CargoTrip.objects.none()
+
         trips = CargoTrip.objects.filter(
             driver__isnull=True,
             status__in=["requested", "searching_driver"],
         ).select_related("order", "order__customer").order_by("-created_at")
-        logger.error(f"[DriverAvailableTripsView] Found {trips.count()} available trips")
+
+        # Filter by driver's region: match trip's origin_station to driver's region
+        driver_region = (driver.region or "").strip()
+        if driver_region:
+            from stations.views import _get_center_map
+            center_map = _get_center_map()
+            # Find cargo center IDs whose center_name matches the driver's region
+            matching_station_ids = [
+                sid for sid, cdata in center_map.items()
+                if (cdata.get("center_name", "") or cdata.get("name", "")).strip().lower() == driver_region.lower()
+            ]
+            if matching_station_ids:
+                trips = trips.filter(order__origin_station__in=matching_station_ids)
+            else:
+                # No matching stations found for driver's region — no trips
+                logger.error(f"[DriverAvailableTripsView] No stations found for region '{driver_region}', returning empty")
+                return CargoTrip.objects.none()
+
+        logger.error(f"[DriverAvailableTripsView] Found {trips.count()} available trips for region '{driver_region}'")
         return trips
 
 

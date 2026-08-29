@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from commissions.models import get_driver_commission
 from stations.views import _fetch_cargo_centers
 
 from .models import CargoTrip
@@ -36,6 +37,8 @@ class CargoTripSerializer(serializers.ModelSerializer):
     customer_phone = serializers.SerializerMethodField()
     shipping_fare = serializers.SerializerMethodField()
     origin_station_name = serializers.SerializerMethodField()
+    driver_commission_percent = serializers.SerializerMethodField()
+    driver_commission_amount = serializers.SerializerMethodField()
     cargo_description = serializers.SerializerMethodField()
     cargo_weight_kg = serializers.SerializerMethodField()
     cargo_size_name = serializers.SerializerMethodField()
@@ -75,6 +78,8 @@ class CargoTripSerializer(serializers.ModelSerializer):
             "customer_phone",
             "shipping_fare",
             "origin_station_name",
+            "driver_commission_percent",
+            "driver_commission_amount",
             "cargo_description",
             "cargo_weight_kg",
             "cargo_size_name",
@@ -144,6 +149,18 @@ class CargoTripSerializer(serializers.ModelSerializer):
         if obj.order.shipping_fare:
             return str(obj.order.shipping_fare)
         return None
+
+    def get_driver_commission_percent(self, obj):
+        percent, _amount = get_driver_commission(obj.distance_km, obj.fare_amount)
+        if percent is None:
+            return None
+        return str(percent)
+
+    def get_driver_commission_amount(self, obj):
+        _percent, amount = get_driver_commission(obj.distance_km, obj.fare_amount)
+        if amount is None:
+            return None
+        return str(amount)
 
     def get_cargo_description(self, obj):
         return obj.order.description or ""

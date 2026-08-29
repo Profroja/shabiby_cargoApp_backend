@@ -1,0 +1,105 @@
+{% extends "adminpanel/base.html" %}
+{% block title %}Commissions{% endblock %}
+{% block content %}
+<h2 class="mb-4">Driver Commissions</h2>
+
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+<div class="card stat-card mb-4">
+    <div class="card-header bg-white"><strong><i class="bi bi-plus-circle"></i> Add Commission Band</strong></div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Commission is a percentage of the pickup trip fare, selected by the trip distance (km).
+            The amount is shown to the driver in the app.
+        </p>
+        <form method="post" action="{% url 'adminpanel:commissions' %}" class="row g-3">
+            {% csrf_token %}
+            <div class="col-md-3">
+                <label class="form-label">Min distance (km)</label>
+                <input type="number" step="0.01" min="0" name="min_distance_km" class="form-control" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Max distance (km)</label>
+                <input type="number" step="0.01" min="0" name="max_distance_km" class="form-control" placeholder="∞ if empty">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Commission %</label>
+                <input type="number" step="0.01" min="0" name="commission_percent" class="form-control" required>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="is_active" checked>
+                    <label class="form-check-label">Active</label>
+                </div>
+            </div>
+            <div class="col-md-1 d-flex align-items-end">
+                <button class="btn btn-primary w-100">Add</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card stat-card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Min (km)</th>
+                    <th>Max (km)</th>
+                    <th>Commission %</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for band in bands %}
+                <tr>
+                    <td>{{ band.min_distance_km }}</td>
+                    <td>{{ band.max_distance_km|default:"∞" }}</td>
+                    <td><strong>{{ band.commission_percent }} %</strong></td>
+                    <td>
+                        {% if band.is_active %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ band.created_at|date:"M d, Y" }}</td>
+                    <td>
+                        <a href="{% url 'adminpanel:commission-edit' band.pk %}" class="btn btn-sm btn-outline-primary py-1">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <button class="btn btn-sm btn-outline-danger py-1" onclick="deleteCommission('{{ band.pk }}')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center text-muted py-4">No commission bands yet. Add one above.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function deleteCommission(pk) {
+    if (!confirm('Delete this commission band?')) return;
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+        (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
+    fetch(`/panel/commissions/${pk}/delete/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.ok) location.reload();
+        else alert('Error: ' + (data.error || 'Failed to delete'));
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+</script>
+{% endblock %}

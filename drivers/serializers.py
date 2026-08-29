@@ -39,6 +39,7 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "is_online",
             "rating_avg",
             "rating_count",
+            "region",
             "created_at",
             "updated_at",
         )
@@ -85,6 +86,7 @@ class DriverRegistrationSerializer(serializers.Serializer):
     license_number = serializers.CharField(max_length=50)
     license_photo = serializers.ImageField()
     profile_photo = serializers.ImageField()
+    region = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
 
     def validate_license_plate(self, value):
         if not value:
