@@ -66,7 +66,8 @@ class DriverAvailableTripsView(generics.ListAPIView):
             status__in=["requested", "searching_driver"],
         ).select_related("order", "order__customer").order_by("-created_at")
 
-        # Filter by driver's region: match trip's origin_station to driver's region
+        # Filter by driver's region: match trip's destination_station (nearest cargo
+        # center to the customer's pickup) to the driver's registered region.
         driver_region = (driver.region or "").strip()
         if driver_region:
             from stations.views import _get_center_map
@@ -77,7 +78,7 @@ class DriverAvailableTripsView(generics.ListAPIView):
                 if (cdata.get("center_name", "") or cdata.get("name", "")).strip().lower() == driver_region.lower()
             ]
             if matching_station_ids:
-                trips = trips.filter(order__origin_station__in=matching_station_ids)
+                trips = trips.filter(destination_station__in=matching_station_ids)
             else:
                 # No matching stations found for driver's region — no trips
                 logger.error(f"[DriverAvailableTripsView] No stations found for region '{driver_region}', returning empty")
