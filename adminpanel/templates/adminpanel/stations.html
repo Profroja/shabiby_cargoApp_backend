@@ -1,0 +1,161 @@
+{% extends "adminpanel/base.html" %}
+{% block title %}Cargo Stations{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Cargo Stations</h2>
+    <form method="post" action="{% url 'adminpanel:station-import' %}"
+          onsubmit="return confirm('Copy all stations from the main Shabiby system? Stations whose branch code already exists here are skipped.');">
+        {% csrf_token %}
+        <button class="btn btn-outline-primary btn-sm"><i class="bi bi-cloud-download"></i> Import from main system</button>
+    </form>
+</div>
+
+{% if notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+{% if missing_coords %}
+<div class="alert alert-warning">
+    <strong>{{ missing_coords }} station{{ missing_coords|pluralize }} without coordinates.</strong>
+    The apps use coordinates to pick the nearest station to a customer and to draw routes on the map.
+    Stations without them can't be chosen as the nearest station.
+</div>
+{% endif %}
+
+<div class="card stat-card mb-4">
+    <div class="card-header bg-white"><strong><i class="bi bi-plus-circle"></i> Add Station</strong></div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            To get coordinates: open Google Maps, right-click the station's exact location and click the
+            numbers at the top of the menu (e.g. <code>-6.8185, 39.2695</code>) to copy them.
+            The first number is the latitude, the second the longitude.
+        </p>
+        <form method="post" action="{% url 'adminpanel:stations' %}" class="row g-3">
+            {% csrf_token %}
+            <div class="col-md-4">
+                <label class="form-label">Station name</label>
+                <input name="name" class="form-control" value="{{ form.name|default:'' }}" placeholder="e.g. KARIAKOO" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Branch code</label>
+                <input name="branch_code" class="form-control text-uppercase" maxlength="10" value="{{ form.branch_code|default:'' }}" placeholder="DAR" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">City / area</label>
+                <input name="city" class="form-control" value="{{ form.city|default:'' }}" placeholder="Kariakoo">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Region</label>
+                <input name="region" class="form-control" value="{{ form.region|default:'' }}" placeholder="Dar es Salaam">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Street address</label>
+                <input name="address" class="form-control" value="{{ form.address|default:'' }}" placeholder="Optional">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Latitude</label>
+                <input name="latitude" class="form-control" inputmode="decimal" value="{{ form.latitude|default:'' }}" placeholder="-6.8185">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Longitude</label>
+                <input name="longitude" class="form-control" inputmode="decimal" value="{{ form.longitude|default:'' }}" placeholder="39.2695">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Fare zone</label>
+                <select name="zone" class="form-select">
+                    <option value="">—</option>
+                    {% for zone in zones %}
+                    <option value="{{ zone.id }}" {% if form.zone == zone.id|stringformat:"s" %}selected{% endif %}>{{ zone.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-1 d-flex align-items-end">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="is_active" {% if not form or form.is_active %}checked{% endif %}>
+                    <label class="form-check-label">Active</label>
+                </div>
+            </div>
+            <div class="col-md-1 d-flex align-items-end">
+                <button class="btn btn-primary w-100">Add</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card stat-card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th>Station</th>
+                    <th>Code</th>
+                    <th>Location</th>
+                    <th>Coordinates</th>
+                    <th>Fare zone</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for station in stations %}
+                <tr>
+                    <td><strong>{{ station.name }}</strong></td>
+                    <td><code>{{ station.branch_code }}</code></td>
+                    <td>{{ station.city }}{% if station.city and station.region %}, {% endif %}{{ station.region }}</td>
+                    <td>
+                        {% if station.latitude is not None %}
+                        <a href="https://www.google.com/maps?q={{ station.latitude }},{{ station.longitude }}" target="_blank" rel="noopener">
+                            {{ station.latitude }}, {{ station.longitude }} <i class="bi bi-box-arrow-up-right small"></i>
+                        </a>
+                        {% else %}
+                        <span class="badge bg-warning text-dark">Missing</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ station.zone.name|default:"—" }}</td>
+                    <td>
+                        {% if station.is_active %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-nowrap">
+                        <a href="{% url 'adminpanel:station-edit' station.pk %}" class="btn btn-sm btn-outline-primary py-1" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <button class="btn btn-sm btn-outline-danger py-1" title="Delete" onclick="deleteStation('{{ station.pk }}', '{{ station.name|escapejs }}')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">
+                        No stations yet. Add one above, or use <strong>Import from main system</strong>.
+                        Until you add stations, the apps keep using the main system's station list.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function deleteStation(pk, name) {
+    if (!confirm('Delete station "' + name + '"?')) return;
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+        (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
+    fetch(`/panel/stations/${pk}/delete/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.ok) location.reload();
+        else alert('Error: ' + (data.error || 'Failed to delete'));
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+</script>
+{% endblock %}

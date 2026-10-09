@@ -30,7 +30,8 @@ def _get_external_token():
     return None
 
 
-def _fetch_cargo_centers(active_only=True):
+def _fetch_external_centers(active_only=True):
+    """Stations from the main Shabiby system (shabibycargo.co.tz)."""
     token = _cached_token or _get_external_token()
     if not token:
         return None
@@ -64,8 +65,88 @@ def _fetch_cargo_centers(active_only=True):
     return None
 
 
+def _external_get(path, token):
+    resp = requests.get(f"{EXTERNAL_API_BASE}{path}", headers={"Authorization": f"Bearer {token}"}, timeout=15)
+    return resp.json() if resp.status_code == 200 else None
+
+
+def fetch_external_for_import():
+    """All main-system cargo centers, with coordinates where the main system has them.
+    Returns a list of station dicts, or None if the main system can't be reached."""
+    token = _get_external_token()
+    if not token:
+        return None
+    try:
+        centers = _external_get("/cargo-centers/?active_only=false", token)
+        located = _external_get("/stations/?active_only=false", token) or []
+    except Exception as e:
+        logger.error(f"External import fetch failed: {e}")
+        return None
+    if centers is None:
+        return None
+    coords = {
+        (item.get("center_name") or "").strip().lower(): (item.get("latitude"), item.get("longitude"))
+        for item in located
+    }
+    for item in centers:
+        if item.get("latitude") is None or item.get("longitude") is None:
+            name = (item.get("center_name") or "").strip().lower()
+            item["latitude"], item["longitude"] = coords.get(name, (None, None))
+    return centers
+
+
+def station_record(station):
+    """A local CargoStation in the same shape the main system's API uses."""
+    location = ", ".join(p for p in [station.city, station.region] if p) or station.address
+    return {
+        "id": str(station.id),
+        "center_name": station.name,
+        "name": station.name,
+        "location": location,
+        "branch_code": station.branch_code,
+        "is_active": station.is_active,
+        "latitude": float(station.latitude) if station.latitude is not None else None,
+        "longitude": float(station.longitude) if station.longitude is not None else None,
+        "created_at": station.created_at.isoformat() if station.created_at else None,
+        "updated_at": station.updated_at.isoformat() if station.updated_at else None,
+    }
+
+
+def _local_stations(active_only=True):
+    from .models import CargoStation
+
+    qs = CargoStation.objects.all().order_by("name")
+    if active_only:
+        qs = qs.filter(is_active=True)
+    return [station_record(s) for s in qs]
+
+
+def _fetch_cargo_centers(active_only=True):
+    """Every station the backend knows about, for looking stations up by ID.
+
+    Admin-managed stations (local CargoStation) come first. Main-system stations
+    are appended so orders created before the switch still resolve their names.
+    """
+    local = _local_stations(active_only)
+    external = _fetch_external_centers(active_only) or []
+    if not local:
+        return external or None
+    local_ids = {r["id"] for r in local}
+    return local + [item for item in external if str(item.get("id")) not in local_ids]
+
+
+def _app_station_list(active_only=True):
+    """Stations customers can choose: the admin-managed list once it has any
+    stations, otherwise the main system's list (so nothing breaks before setup)."""
+    from .models import CargoStation
+
+    if CargoStation.objects.exists():
+        return _local_stations(active_only)
+    return _fetch_external_centers(active_only)
+
+
 def _get_center_map():
-    """Return a dict mapping station ID (str) -> raw station data from external API."""
+    """Return a dict mapping station ID (str) -> station data (local + main system)."""
     data = _fetch_cargo_centers(active_only=False)
     if not data:
         return {}
@@ -77,7 +158,7 @@ class CargoCenterListView(generics.GenericAPIView):
         active_only = request.query_params.get("active_only", "true")
         active = active_only.lower() != "false"
 
-        data = _fetch_cargo_centers(active_only=active)
+        data = _app_station_list(active_only=active)
         if data is None:
             return Response(
                 {"error": "Failed to fetch cargo centers from external service."},

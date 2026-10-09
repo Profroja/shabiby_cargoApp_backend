@@ -68,8 +68,13 @@ class CargoOrderSerializer(serializers.ModelSerializer):
                 "location": c.get("location", ""),
                 "branch_code": c.get("branch_code", ""),
                 "is_active": c.get("is_active", True),
+                "latitude": c.get("latitude"),
+                "longitude": c.get("longitude"),
             }
-        return {"id": station_id, "name": "", "center_name": "", "branch_code": "", "is_active": True}
+        return {
+            "id": station_id, "name": "", "center_name": "", "branch_code": "",
+            "is_active": True, "latitude": None, "longitude": None,
+        }
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

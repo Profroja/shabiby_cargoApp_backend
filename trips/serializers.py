@@ -205,9 +205,12 @@ class CargoTripSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def _station_coords(center):
-        """Coordinates come from the local CargoStation matched by branch code."""
+        """The station's own coordinates (admin-managed stations carry them),
+        else a local CargoStation with the same branch code."""
         if not center:
             return None, None
+        if center.get("latitude") is not None and center.get("longitude") is not None:
+            return float(center["latitude"]), float(center["longitude"])
         try:
             from stations.models import CargoStation
             station = CargoStation.objects.filter(branch_code=center.get("branch_code")).first()
@@ -238,24 +241,9 @@ class CargoTripSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
-        centers = self.context.get("_center_map")
-        if centers is None:
-            centers = _get_center_map()
-        c = centers.get(str(instance.destination_station))
+        c = self._centers().get(str(instance.destination_station))
         
-        # Try to get coordinates from local CargoStation model
-        latitude = None
-        longitude = None
-        try:
-            from stations.models import CargoStation
-            local_station = CargoStation.objects.filter(
-                branch_code=c.get("branch_code") if c else None
-            ).first()
-            if local_station:
-                latitude = float(local_station.latitude) if local_station.latitude else None
-                longitude = float(local_station.longitude) if local_station.longitude else None
-        except Exception:
-            pass
+        latitude, longitude = self._station_coords(c)
         
         if c:
             ret["destination_station"] = {

@@ -98,6 +98,9 @@
         <a href="{% url 'adminpanel:trips' %}" class="{% if request.resolver_match.url_name == 'trips' %}active{% endif %}">
             <i class="bi bi-truck"></i> Trips
         </a>
+        <a href="{% url 'adminpanel:stations' %}" class="{% if request.resolver_match.url_name == 'stations' or request.resolver_match.url_name == 'station-edit' %}active{% endif %}">
+            <i class="bi bi-building"></i> Cargo Stations
+        </a>
         <a href="{% url 'adminpanel:commissions' %}" class="{% if request.resolver_match.url_name == 'commissions' or request.resolver_match.url_name == 'commission-edit' %}active{% endif %}">
             <i class="bi bi-percent"></i> Commissions
         </a>

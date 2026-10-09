@@ -2,12 +2,15 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.shortcuts import redirect, render, get_object_or_404
 from django.http import JsonResponse
+from django.urls import reverse
 
 from auths.models import User
 from commissions.models import DriverCommissionBand, get_driver_commission
 from drivers.models import Driver
+from farezones.models import FareZone
 from orders.models import CargoOrder
-from stations.views import _fetch_cargo_centers
+from stations.models import CargoStation
+from stations.views import _fetch_cargo_centers, fetch_external_for_import
 from trips.models import CargoTrip
 
 
@@ -306,3 +309,153 @@ def commission_delete(request, pk):
     band = get_object_or_404(DriverCommissionBand, pk=pk)
     band.delete()
     return JsonResponse({"ok": True})
+
+
+# ---------- Cargo stations ----------
+
+def _parse_station_form(post):
+    """Return the cleaned station fields, or raise ValueError with a message."""
+    from decimal import Decimal, InvalidOperation
+
+    name = post.get("name", "").strip()
+    branch_code = post.get("branch_code", "").strip().upper()
+    if not name or not branch_code:
+        raise ValueError("Station name and branch code are required.")
+    if len(branch_code) > 10:
+        raise ValueError("Branch code must be 10 characters or fewer.")
+
+    coords = {}
+    for field, low, high in (("latitude", -90, 90), ("longitude", -180, 180)):
+        raw = post.get(field, "").strip()
+        if not raw:
+            coords[field] = None
+            continue
+        try:
+            value = Decimal(raw).quantize(Decimal("0.000001"))
+        except InvalidOperation:
+            raise ValueError(f"{field.capitalize()} must be a number.")
+        if not low <= value <= high:
+            raise ValueError(f"{field.capitalize()} must be between {low} and {high}.")
+        coords[field] = value
+    if (coords["latitude"] is None) != (coords["longitude"] is None):
+        raise ValueError("Enter both latitude and longitude, or leave both empty.")
+
+    zone_id = post.get("zone", "").strip()
+    return {
+        "name": name,
+        "branch_code": branch_code,
+        "region": post.get("region", "").strip(),
+        "city": post.get("city", "").strip(),
+        "address": post.get("address", "").strip(),
+        "latitude": coords["latitude"],
+        "longitude": coords["longitude"],
+        "zone_id": int(zone_id) if zone_id.isdigit() else None,
+        "is_active": post.get("is_active") == "on",
+    }
+
+
+def _station_page(request, error=None, form=None, status=200):
+    stations = CargoStation.objects.select_related("zone").order_by("name")
+    return render(
+        request,
+        "adminpanel/stations.html",
+        {
+            "stations": stations,
+            "zones": FareZone.objects.filter(is_active=True).order_by("name"),
+            "missing_coords": stations.filter(latitude__isnull=True).count(),
+            "error": error,
+            "form": form or {},
+            "notice": request.GET.get("notice", ""),
+        },
+        status=status,
+    )
+
+
+@login_required
+@user_passes_test(is_admin)
+def station_list(request):
+    if request.method == "POST":
+        try:
+            data = _parse_station_form(request.POST)
+        except ValueError as e:
+            return _station_page(request, error=str(e), form=request.POST, status=400)
+        if CargoStation.objects.filter(branch_code=data["branch_code"]).exists():
+            return _station_page(
+                request,
+                error=f"A station with branch code {data['branch_code']} already exists.",
+                form=request.POST,
+                status=400,
+            )
+        CargoStation.objects.create(**data)
+        return redirect("adminpanel:stations")
+    return _station_page(request)
+
+
+@login_required
+@user_passes_test(is_admin)
+def station_edit(request, pk):
+    station = get_object_or_404(CargoStation, pk=pk)
+    context = {"station": station, "zones": FareZone.objects.filter(is_active=True).order_by("name")}
+    if request.method == "POST":
+        try:
+            data = _parse_station_form(request.POST)
+        except ValueError as e:
+            return render(request, "adminpanel/station_edit.html", {**context, "error": str(e)}, status=400)
+        if CargoStation.objects.filter(branch_code=data["branch_code"]).exclude(pk=station.pk).exists():
+            error = f"Another station already uses branch code {data['branch_code']}."
+            return render(request, "adminpanel/station_edit.html", {**context, "error": error}, status=400)
+        for field, value in data.items():
+            setattr(station, field, value)
+        station.save()
+        return redirect("adminpanel:stations")
+    return render(request, "adminpanel/station_edit.html", context)
+
+
+@login_required
+@user_passes_test(is_admin)
+def station_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    station = get_object_or_404(CargoStation, pk=pk)
+    station_id = str(station.pk)
+    if CargoOrder.objects.filter(origin_station=station_id).exists() or CargoOrder.objects.filter(
+        destination_station=station_id
+    ).exists():
+        return JsonResponse(
+            {"error": "This station is used by existing orders. Set it to inactive instead of deleting it."},
+            status=400,
+        )
+    station.delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_admin)
+def station_import(request):
+    """Copy the main Shabiby system's stations in. Existing branch codes are skipped."""
+    if request.method != "POST":
+        return redirect("adminpanel:stations")
+    centers = fetch_external_for_import()
+    if centers is None:
+        return _station_page(request, error="Could not reach the main Shabiby system. Try again later.", status=502)
+
+    created = 0
+    for item in centers:
+        code = (item.get("branch_code") or "").strip().upper()[:10]
+        name = (item.get("center_name") or item.get("name") or "").strip()
+        if not code or not name or CargoStation.objects.filter(branch_code=code).exists():
+            continue
+        # Locations look like "KARIAKOO , Dar es Salaam" or "MAFINGA-Iringa".
+        parts = [p.strip() for p in (item.get("location") or "").replace("-", ",").split(",") if p.strip()]
+        has_coords = item.get("latitude") is not None and item.get("longitude") is not None
+        CargoStation.objects.create(
+            name=name,
+            branch_code=code,
+            city=parts[0] if len(parts) > 1 else "",
+            region=parts[-1] if parts else "",
+            latitude=item["latitude"] if has_coords else None,
+            longitude=item["longitude"] if has_coords else None,
+            is_active=item.get("is_active", True),
+        )
+        created += 1
+    return redirect(f"{reverse('adminpanel:stations')}?notice=Imported {created} station(s).")
