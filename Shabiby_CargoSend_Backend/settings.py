@@ -190,3 +190,7 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
 }
+
+# How long an SMS verification code stays valid. SMS delivery can be slow,
+# so keep this generous.
+OTP_EXPIRY_MINUTES = 10

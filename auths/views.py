@@ -13,6 +13,7 @@ from .serializers import (
     GoogleLoginSerializer,
     SendOTPSerializer,
     VerifyOTPSerializer,
+    otp_expiry_minutes,
 )
 from .sms_notification import send_sms_notification
 
@@ -39,7 +40,7 @@ class SendOTPView(APIView):
 
         response_data = {
             "message": "OTP sent successfully.",
-            "expires_in_minutes": 5,
+            "expires_in_minutes": otp_expiry_minutes(),
         }
 
         if not sms_sent:

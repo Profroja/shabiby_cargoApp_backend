@@ -1,5 +1,8 @@
+import logging
 import random
+import re
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
@@ -7,13 +10,28 @@ from rest_framework import serializers
 from .models import OTPCode
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+def otp_expiry_minutes():
+    return getattr(settings, "OTP_EXPIRY_MINUTES", 10)
+
+
+def normalize_phone(value):
+    """Store and match phones as local 0XXXXXXXXX, whatever format is sent."""
+    digits = re.sub(r"\D", "", str(value))
+    if digits.startswith("255") and len(digits) == 12:
+        digits = "0" + digits[3:]
+    elif len(digits) == 9:
+        digits = "0" + digits
+    return digits or str(value).strip()
 
 
 class SendOTPSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=20)
 
     def validate_phone_number(self, value):
-        return value
+        return normalize_phone(value)
 
     def save(self):
         phone = self.validated_data["phone_number"]
@@ -21,7 +39,7 @@ class SendOTPSerializer(serializers.Serializer):
         otp = OTPCode.objects.create(
             phone_number=phone,
             code=code,
-            expires_at=timezone.now() + timezone.timedelta(minutes=5),
+            expires_at=timezone.now() + timezone.timedelta(minutes=otp_expiry_minutes()),
         )
         return otp
 
@@ -30,26 +48,41 @@ class VerifyOTPSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=20)
     code = serializers.CharField(max_length=6)
 
+    def validate_phone_number(self, value):
+        return normalize_phone(value)
+
+    def validate_code(self, value):
+        return value.strip()
+
     def validate(self, attrs):
         phone = attrs.get("phone_number")
         code = attrs.get("code")
+        now = timezone.now()
 
-        otp = (
+        matches = OTPCode.objects.filter(phone_number=phone, code=code)
+        otp = matches.filter(is_used=False, expires_at__gt=now).order_by("-created_at").first()
+        if otp:
+            attrs["otp"] = otp
+            return attrs
+
+        # Work out why it failed so the user gets a useful message.
+        latest_match = matches.order_by("-created_at").first()
+        if latest_match is None:
+            reason, message = "wrong_code", "Incorrect code. Check the SMS and try again."
+        elif latest_match.is_used:
+            reason, message = "used", "This code has already been used. Request a new code."
+        else:
+            reason, message = "expired", "This code has expired. Request a new code."
+
+        logger.warning(
+            "OTP verify failed for %s: %s (codes sent in last hour: %s)",
+            phone,
+            reason,
             OTPCode.objects.filter(
-                phone_number=phone,
-                code=code,
-                is_used=False,
-                expires_at__gt=timezone.now(),
-            )
-            .order_by("-created_at")
-            .first()
+                phone_number=phone, created_at__gt=now - timezone.timedelta(hours=1)
+            ).count(),
         )
-
-        if not otp:
-            raise serializers.ValidationError("Invalid or expired OTP code.")
-
-        attrs["otp"] = otp
-        return attrs
+        raise serializers.ValidationError(message)
 
 
 class CompleteRegistrationSerializer(serializers.Serializer):
