@@ -57,6 +57,8 @@
                         <span class="badge bg-secondary">Arrived</span>
                         {% elif trip.status == 'picked_up' %}
                         <span class="badge bg-primary">Picked Up</span>
+                        {% elif trip.status == 'arrived_at_station' %}
+                        <span class="badge bg-info">Arrived at Station</span>
                         {% elif trip.status == 'delivered_to_station' %}
                         <span class="badge bg-success">Delivered</span>
                         {% elif trip.status == 'cancelled' %}

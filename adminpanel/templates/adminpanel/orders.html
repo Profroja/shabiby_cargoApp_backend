@@ -61,6 +61,12 @@
                             <span class="badge bg-info">Pickup</span>
                         {% elif order.status == 'at_origin_station' %}
                             <span class="badge bg-secondary">At Station</span>
+                        {% elif order.status == 'in_transit' %}
+                            <span class="badge bg-warning text-dark">On the Way</span>
+                        {% elif order.status == 'arrived_at_destination' %}
+                            <span class="badge bg-info">At Destination</span>
+                        {% elif order.status == 'delivered' %}
+                            <span class="badge bg-success">Delivered</span>
                         {% elif order.status == 'cancelled' %}
                             <span class="badge bg-danger">Cancelled</span>
                         {% else %}

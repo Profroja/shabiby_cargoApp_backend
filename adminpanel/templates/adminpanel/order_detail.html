@@ -82,6 +82,12 @@
                             <span class="badge bg-info">Pickup In Progress</span>
                             {% elif order.status == 'at_origin_station' %}
                             <span class="badge bg-secondary">At Origin Station</span>
+                            {% elif order.status == 'in_transit' %}
+                            <span class="badge bg-warning text-dark">On the Way to Destination</span>
+                            {% elif order.status == 'arrived_at_destination' %}
+                            <span class="badge bg-info">Arrived at Destination</span>
+                            {% elif order.status == 'delivered' %}
+                            <span class="badge bg-success">Delivered</span>
                             {% elif order.status == 'cancelled' %}
                             <span class="badge bg-danger">Cancelled</span>
                             {% else %}
@@ -93,11 +99,42 @@
                         <th>Created</th>
                         <td>{{ order.created_at|date:"M d, Y H:i" }}</td>
                     </tr>
+                    {% if order.dispatched_at %}
+                    <tr>
+                        <th>Dispatched</th>
+                        <td>{{ order.dispatched_at|date:"M d, Y H:i" }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if order.arrived_at_destination_at %}
+                    <tr>
+                        <th>Arrived</th>
+                        <td>{{ order.arrived_at_destination_at|date:"M d, Y H:i" }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if order.delivered_at %}
+                    <tr>
+                        <th>Collected</th>
+                        <td>{{ order.delivered_at|date:"M d, Y H:i" }}</td>
+                    </tr>
+                    {% endif %}
                     <tr>
                         <th>Updated</th>
                         <td>{{ order.updated_at|date:"M d, Y H:i" }}</td>
                     </tr>
                 </table>
+                {% if order.status == 'at_origin_station' %}
+                <button class="btn btn-primary w-100 mt-3" onclick="updateOrderStatus('{{ order.id }}', 'in_transit')">
+                    Dispatch to Destination Station
+                </button>
+                {% elif order.status == 'in_transit' %}
+                <button class="btn btn-primary w-100 mt-3" onclick="updateOrderStatus('{{ order.id }}', 'arrived_at_destination')">
+                    Mark Arrived at Destination
+                </button>
+                {% elif order.status == 'arrived_at_destination' %}
+                <button class="btn btn-success w-100 mt-3" onclick="updateOrderStatus('{{ order.id }}', 'delivered')">
+                    Mark Collected by Receiver
+                </button>
+                {% endif %}
             </div>
         </div>
 
@@ -146,6 +183,8 @@
                             <span class="badge bg-info">Arrived at Pickup</span>
                             {% elif pickup_trip.status == 'picked_up' %}
                             <span class="badge bg-warning text-dark">Picked Up</span>
+                            {% elif pickup_trip.status == 'arrived_at_station' %}
+                            <span class="badge bg-info">Arrived at Station</span>
                             {% elif pickup_trip.status == 'delivered_to_station' %}
                             <span class="badge bg-success">Delivered to Station</span>
                             {% elif pickup_trip.status == 'cancelled' %}
@@ -262,6 +301,28 @@ function submitFare(event, orderId) {
     })
     .catch(err => alert('Network error: ' + err));
     return false;
+}
+
+function updateOrderStatus(orderId, newStatus) {
+    if (!confirm('Update this order's status? The customer will be notified in the app.')) return;
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+    fetch(`/panel/orders/${orderId}/update-status/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken,
+        },
+        body: `status=${encodeURIComponent(newStatus)}`,
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.ok) {
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to update status'));
+        }
+    })
+    .catch(err => alert('Network error: ' + err));
 }
 
 function deleteOrder(orderId) {

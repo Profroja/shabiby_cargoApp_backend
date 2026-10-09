@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from drivers.models import Driver
 from orders.models import CargoOrder
 
-from .models import CargoTrip
+from .models import CargoTrip, TripDecline
 from .serializers import CargoTripSerializer
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,30 @@ class CargoTripListView(generics.ListCreateAPIView):
         except Exception as e:
             logger.error(f"[CargoTripListView] Error creating trip: {e}")
             raise
+
+
+class CustomerTrackingView(generics.ListAPIView):
+    """Customer's shipments that are still in progress, from driver search
+    through to delivery at the destination station."""
+    serializer_class = CargoTripSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            CargoTrip.objects.filter(
+                order__customer=self.request.user,
+                leg_type=CargoTrip.LegType.PICKUP,
+            )
+            .exclude(status=CargoTrip.Status.CANCELLED)
+            .exclude(
+                order__status__in=[
+                    CargoOrder.Status.DELIVERED,
+                    CargoOrder.Status.CANCELLED,
+                ]
+            )
+            .select_related("order", "order__customer", "driver", "driver__user")
+            .order_by("-created_at")
+        )
 
 
 class CargoTripDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -64,6 +88,8 @@ class DriverAvailableTripsView(generics.ListAPIView):
         trips = CargoTrip.objects.filter(
             driver__isnull=True,
             status__in=["requested", "searching_driver"],
+        ).exclude(
+            declines__driver=driver,
         ).select_related("order", "order__customer").order_by("-created_at")
 
         # Filter by driver's region: match trip's destination_station (nearest cargo
@@ -153,6 +179,26 @@ def accept_trip(request, pk):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+def decline_trip(request, pk):
+    """Driver declines an available trip so it no longer shows in their request list."""
+    if request.user.role != "driver":
+        return Response({"error": "Driver access required."}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        driver = request.user.driver
+    except Driver.DoesNotExist:
+        return Response({"error": "No driver profile found."}, status=status.HTTP_404_NOT_FOUND)
+
+    trip = CargoTrip.objects.filter(pk=pk, driver__isnull=True).first()
+    if not trip:
+        return Response({"error": "Trip not available."}, status=status.HTTP_404_NOT_FOUND)
+
+    TripDecline.objects.get_or_create(trip=trip, driver=driver)
+    return Response({"ok": True}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def update_trip_status(request, pk):
     """Driver updates trip status. Valid transitions only."""
     if request.user.role != "driver":
@@ -172,6 +218,7 @@ def update_trip_status(request, pk):
         "en_route_to_pickup",
         "arrived_at_pickup",
         "picked_up",
+        "arrived_at_station",
         "delivered_to_station",
         "cancelled",
     ]
@@ -188,6 +235,9 @@ def update_trip_status(request, pk):
     elif new_status == "picked_up":
         trip.picked_up_at = now
         update_fields.append("picked_up_at")
+    elif new_status == "arrived_at_station":
+        trip.arrived_at_station_at = now
+        update_fields.append("arrived_at_station_at")
     elif new_status == "delivered_to_station":
         trip.delivered_at = now
         update_fields.append("delivered_at")

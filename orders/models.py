@@ -9,6 +9,9 @@ class CargoOrder(models.Model):
         SUBMITTED = "submitted", "Submitted"
         PICKUP_IN_PROGRESS = "pickup_in_progress", "Pickup In Progress"
         AT_ORIGIN_STATION = "at_origin_station", "At Origin Station"
+        IN_TRANSIT = "in_transit", "In Transit To Destination"
+        ARRIVED_AT_DESTINATION = "arrived_at_destination", "Arrived At Destination"
+        DELIVERED = "delivered", "Delivered"
         CANCELLED = "cancelled", "Cancelled"
 
     class ShippingFareStatus(models.TextChoices):
@@ -43,6 +46,9 @@ class CargoOrder(models.Model):
     status = models.CharField(
         max_length=25, choices=Status.choices, default=Status.SUBMITTED
     )
+    dispatched_at = models.DateTimeField(null=True, blank=True)
+    arrived_at_destination_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -54,3 +60,29 @@ class CargoOrder(models.Model):
 
     def __str__(self):
         return f"Order {self.id} — {self.status}"
+
+    # Station staff move the order along after the pickup trip drops it at the
+    # origin station: dispatched -> arrived at destination -> collected.
+    STATION_TRANSITIONS = {
+        "at_origin_station": "in_transit",
+        "in_transit": "arrived_at_destination",
+        "arrived_at_destination": "delivered",
+    }
+    STATION_TIMESTAMPS = {
+        "in_transit": "dispatched_at",
+        "arrived_at_destination": "arrived_at_destination_at",
+        "delivered": "delivered_at",
+    }
+
+    def advance_station_status(self, new_status):
+        """Move to the next station status. Returns an error string, or None."""
+        from django.utils import timezone
+
+        expected = self.STATION_TRANSITIONS.get(self.status)
+        if new_status != expected:
+            return f"Cannot change status from '{self.status}' to '{new_status}'."
+        self.status = new_status
+        stamp = self.STATION_TIMESTAMPS[new_status]
+        setattr(self, stamp, timezone.now())
+        self.save(update_fields=["status", stamp, "updated_at"])
+        return None

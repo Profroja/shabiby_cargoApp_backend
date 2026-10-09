@@ -193,6 +193,18 @@ def order_set_fare(request, pk):
 
 @login_required
 @user_passes_test(is_admin)
+def order_update_status(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    order = get_object_or_404(CargoOrder, pk=pk)
+    error = order.advance_station_status(request.POST.get("status"))
+    if error:
+        return JsonResponse({"error": error}, status=400)
+    return JsonResponse({"ok": True, "status": order.status})
+
+
+@login_required
+@user_passes_test(is_admin)
 def trip_list(request):
     trips = CargoTrip.objects.select_related("order", "order__customer", "driver", "driver__user").order_by("-created_at")
     return render(request, "adminpanel/trips.html", {"trips": trips})

@@ -16,6 +16,7 @@ class CargoTrip(models.Model):
         EN_ROUTE_TO_PICKUP = "en_route_to_pickup", "En Route To Pickup"
         ARRIVED_AT_PICKUP = "arrived_at_pickup", "Arrived At Pickup"
         PICKED_UP = "picked_up", "Picked Up"
+        ARRIVED_AT_STATION = "arrived_at_station", "Arrived At Station"
         DELIVERED_TO_STATION = "delivered_to_station", "Delivered To Station"
         CANCELLED = "cancelled", "Cancelled"
 
@@ -51,6 +52,7 @@ class CargoTrip(models.Model):
     driver_assigned_at = models.DateTimeField(null=True, blank=True)
     arrived_at_pickup_at = models.DateTimeField(null=True, blank=True)
     picked_up_at = models.DateTimeField(null=True, blank=True)
+    arrived_at_station_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -78,3 +80,22 @@ class CargoTrip(models.Model):
                 return center.get("center_name", "") or center.get("name", "")
         
         return self.destination_station
+
+
+class TripDecline(models.Model):
+    """A driver declined an available trip; it is hidden from their request list."""
+
+    id = models.BigAutoField(primary_key=True)
+    trip = models.ForeignKey(CargoTrip, on_delete=models.CASCADE, related_name="declines")
+    driver = models.ForeignKey(
+        "drivers.Driver", on_delete=models.CASCADE, related_name="declined_trips"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["trip", "driver"], name="uniq_trip_decline"),
+        ]
+
+    def __str__(self):
+        return f"Decline {self.trip_id} by {self.driver_id}"

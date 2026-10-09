@@ -39,10 +39,13 @@ class CargoOrderSerializer(serializers.ModelSerializer):
             "shipping_fare_status",
             "pickup_fare",
             "status",
+            "dispatched_at",
+            "arrived_at_destination_at",
+            "delivered_at",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("customer", "status", "shipping_fare", "shipping_fare_status", "pickup_fare", "created_at", "updated_at")
+        read_only_fields = ("customer", "status", "dispatched_at", "arrived_at_destination_at", "delivered_at", "shipping_fare", "shipping_fare_status", "pickup_fare", "created_at", "updated_at")
 
     def get_cargo_photo_url(self, obj):
         if obj.cargo_photo:

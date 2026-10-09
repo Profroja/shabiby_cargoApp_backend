@@ -42,6 +42,15 @@ class CargoTripSerializer(serializers.ModelSerializer):
     cargo_description = serializers.SerializerMethodField()
     cargo_weight_kg = serializers.SerializerMethodField()
     cargo_size_name = serializers.SerializerMethodField()
+    order_status = serializers.CharField(source="order.status", read_only=True)
+    order_dispatched_at = serializers.DateTimeField(source="order.dispatched_at", read_only=True)
+    order_arrived_at_destination_at = serializers.DateTimeField(
+        source="order.arrived_at_destination_at", read_only=True
+    )
+    order_delivered_at = serializers.DateTimeField(source="order.delivered_at", read_only=True)
+    receiver_name = serializers.CharField(source="order.receiver_name", read_only=True)
+    receiver_phone = serializers.CharField(source="order.receiver_phone", read_only=True)
+    final_destination = serializers.SerializerMethodField()
 
     class Meta:
         model = CargoTrip
@@ -62,6 +71,7 @@ class CargoTripSerializer(serializers.ModelSerializer):
             "driver_assigned_at",
             "arrived_at_pickup_at",
             "picked_up_at",
+            "arrived_at_station_at",
             "delivered_at",
             "cancelled_at",
             "created_at",
@@ -83,6 +93,13 @@ class CargoTripSerializer(serializers.ModelSerializer):
             "cargo_description",
             "cargo_weight_kg",
             "cargo_size_name",
+            "order_status",
+            "order_dispatched_at",
+            "order_arrived_at_destination_at",
+            "order_delivered_at",
+            "receiver_name",
+            "receiver_phone",
+            "final_destination",
         )
         read_only_fields = (
             "driver",
@@ -90,6 +107,7 @@ class CargoTripSerializer(serializers.ModelSerializer):
             "driver_assigned_at",
             "arrived_at_pickup_at",
             "picked_up_at",
+            "arrived_at_station_at",
             "delivered_at",
             "cancelled_at",
             "created_at",
@@ -177,6 +195,39 @@ class CargoTripSerializer(serializers.ModelSerializer):
             return cs.name
         except (CargoSize.DoesNotExist, ValueError, TypeError):
             return None
+
+    def _centers(self):
+        centers = self.context.get("_center_map")
+        if centers is None:
+            centers = _get_center_map()
+            self.context["_center_map"] = centers
+        return centers
+
+    @staticmethod
+    def _station_coords(center):
+        """Coordinates come from the local CargoStation matched by branch code."""
+        if not center:
+            return None, None
+        try:
+            from stations.models import CargoStation
+            station = CargoStation.objects.filter(branch_code=center.get("branch_code")).first()
+            if station and station.latitude is not None and station.longitude is not None:
+                return float(station.latitude), float(station.longitude)
+        except Exception:
+            pass
+        return None, None
+
+    def get_final_destination(self, obj):
+        """The order's destination station (where the receiver collects the cargo)."""
+        c = self._centers().get(str(obj.order.destination_station))
+        latitude, longitude = self._station_coords(c)
+        return {
+            "id": obj.order.destination_station,
+            "name": (c.get("center_name", "") or c.get("name", "")) if c else "",
+            "location": c.get("location", "") if c else "",
+            "latitude": latitude,
+            "longitude": longitude,
+        }
 
     def get_origin_station_name(self, obj):
         centers = _get_center_map()

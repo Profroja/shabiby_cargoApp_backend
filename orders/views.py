@@ -55,3 +55,24 @@ def set_shipping_fare(request, pk):
 
     serializer = CargoOrderSerializer(order, context={"request": request})
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_order_status(request, pk):
+    """Station staff move an order between stations.
+    Body: {"status": "in_transit" | "arrived_at_destination" | "delivered"}"""
+    if request.user.role not in ("admin", "agent"):
+        return Response({"error": "Station staff access required."}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        order = CargoOrder.objects.get(pk=pk)
+    except CargoOrder.DoesNotExist:
+        return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    error = order.advance_station_status(request.data.get("status"))
+    if error:
+        return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
+
+    serializer = CargoOrderSerializer(order, context={"request": request})
+    return Response(serializer.data, status=status.HTTP_200_OK)
