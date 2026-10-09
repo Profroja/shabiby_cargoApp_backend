@@ -63,10 +63,17 @@
     }
     </script>
     <style>
+        /* Same brand colours as the Shabiby Cargo apps. */
+        :root {
+            --brand: #B6024E;
+            --brand-dark: #8E013D;
+            --brand-soft: #FCE9F0;
+            --brand-accent: #F5A623;
+        }
         body { background: #f4f6f9; }
         .sidebar {
             min-height: 100vh;
-            background: #1a2332;
+            background: var(--brand);
             width: 250px;
             position: fixed;
             left: 0;
@@ -79,24 +86,54 @@
             font-size: 1.3rem;
             font-weight: 700;
             padding: 0 20px 30px;
-            border-bottom: 1px solid #2d3a4e;
+            border-bottom: 1px solid rgba(255,255,255,0.18);
             margin-bottom: 20px;
         }
         .sidebar a {
             display: flex;
             align-items: center;
             gap: 10px;
-            color: #a0aec0;
+            color: rgba(255,255,255,0.8);
             text-decoration: none;
+            border-left: 3px solid transparent;
             padding: 12px 20px;
             font-size: 0.95rem;
             transition: all 0.2s;
         }
         .sidebar a:hover, .sidebar a.active {
             color: #fff;
-            background: #2d3a4e;
-            border-left: 3px solid #3b82f6;
+            background: var(--brand-dark);
+            border-left-color: var(--brand-accent);
         }
+        .sidebar a.logout { color: #fff; opacity: 0.85; }
+        .sidebar a.logout:hover { opacity: 1; }
+        /* Bootstrap primary -> brand */
+        .btn-primary {
+            --bs-btn-bg: var(--brand);
+            --bs-btn-border-color: var(--brand);
+            --bs-btn-hover-bg: var(--brand-dark);
+            --bs-btn-hover-border-color: var(--brand-dark);
+            --bs-btn-active-bg: var(--brand-dark);
+            --bs-btn-active-border-color: var(--brand-dark);
+            --bs-btn-disabled-bg: var(--brand);
+            --bs-btn-disabled-border-color: var(--brand);
+        }
+        .btn-outline-primary {
+            --bs-btn-color: var(--brand);
+            --bs-btn-border-color: var(--brand);
+            --bs-btn-hover-bg: var(--brand);
+            --bs-btn-hover-border-color: var(--brand);
+            --bs-btn-active-bg: var(--brand-dark);
+            --bs-btn-active-border-color: var(--brand-dark);
+        }
+        .bg-primary { background-color: var(--brand) !important; }
+        .text-primary { color: var(--brand) !important; }
+        a { color: var(--brand); }
+        .form-control:focus, .form-select:focus {
+            border-color: var(--brand);
+            box-shadow: 0 0 0 0.2rem rgba(182, 2, 78, 0.18);
+        }
+        .form-check-input:checked { background-color: var(--brand); border-color: var(--brand); }
         .main-content {
             margin-left: 250px;
             padding: 20px 30px;
@@ -160,7 +197,7 @@
             <i class="bi bi-percent"></i> Commissions
         </a>
         <div style="position: absolute; bottom: 20px; width: 100%;">
-            <a href="{% url 'adminpanel:logout' %}" style="color: #ef4444;">
+            <a href="{% url 'adminpanel:logout' %}" class="logout">
                 <i class="bi bi-box-arrow-right"></i> Logout
             </a>
         </div>
