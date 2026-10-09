@@ -86,20 +86,16 @@
 
 {% block scripts %}
 <script>
-function deleteCommission(pk) {
-    if (!confirm('Delete this commission band?')) return;
-    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
-        (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
-    fetch(`/panel/commissions/${pk}/delete/`, {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrfToken },
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.ok) location.reload();
-        else alert('Error: ' + (data.error || 'Failed to delete'));
-    })
-    .catch(err => alert('Network error: ' + err));
+async function deleteCommission(pk) {
+    const ok = await swalConfirm('This commission band will be removed.', { title: 'Delete commission band?', confirmText: 'Delete', danger: true });
+    if (!ok) return;
+    try {
+        await panelPost(`/panel/commissions/${pk}/delete/`);
+        await swalSuccess('Commission band deleted.');
+        location.reload();
+    } catch (err) {
+        swalError(err.message);
+    }
 }
 </script>
 {% endblock %}

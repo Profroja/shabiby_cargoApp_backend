@@ -141,42 +141,32 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function approveDriver(status) {
-    fetch("{% url 'adminpanel:driver-approve' driver.id %}", {
-        method: "POST",
-        headers: {
-            "X-CSRFToken": "{{ csrf_token }}",
-        },
-        body: new URLSearchParams({ approval_status: status }),
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.ok) {
-            location.reload();
-        } else {
-            alert("Error: " + (data.error || "Unknown error"));
-        }
-    })
-    .catch(err => alert("Request failed: " + err));
+async function approveDriver(status) {
+    const approve = status === 'approved';
+    const ok = await swalConfirm(
+        approve ? 'The driver will be able to receive and accept trips.' : 'The driver will not be able to take trips.',
+        { title: approve ? 'Approve this driver?' : 'Reject this driver?', confirmText: approve ? 'Approve' : 'Reject', danger: !approve },
+    );
+    if (!ok) return;
+    try {
+        await panelPost("{% url 'adminpanel:driver-approve' driver.id %}", { approval_status: status });
+        await swalSuccess(approve ? 'Driver approved.' : 'Driver rejected.');
+        location.reload();
+    } catch (err) {
+        swalError(err.message);
+    }
 }
 
-function deleteDriver() {
-    if (!confirm("Are you sure you want to delete this driver? This cannot be undone.")) return;
-    fetch("{% url 'adminpanel:driver-delete' driver.id %}", {
-        method: "POST",
-        headers: {
-            "X-CSRFToken": "{{ csrf_token }}",
-        },
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.ok) {
-            window.location.href = "{% url 'adminpanel:drivers' %}";
-        } else {
-            alert("Error: " + (data.error || "Unknown error"));
-        }
-    })
-    .catch(err => alert("Request failed: " + err));
+async function deleteDriver() {
+    const ok = await swalConfirm('This cannot be undone.', { title: 'Delete this driver?', confirmText: 'Delete', danger: true });
+    if (!ok) return;
+    try {
+        await panelPost("{% url 'adminpanel:driver-delete' driver.id %}");
+        await swalSuccess('Driver deleted.');
+        window.location.href = "{% url 'adminpanel:drivers' %}";
+    } catch (err) {
+        swalError(err.message);
+    }
 }
 </script>
 {% endblock %}
