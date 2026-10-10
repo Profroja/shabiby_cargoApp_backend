@@ -125,6 +125,10 @@ def station_record(station):
         "longitude": float(station.longitude) if station.longitude is not None else None,
         "price_per_km": float(station.price_per_km) if station.price_per_km is not None else None,
         "min_fare": float(station.min_fare) if station.min_fare is not None else None,
+        "fare_bands": [
+            {"min_km": float(b.min_km), "max_km": float(b.max_km) if b.max_km is not None else None, "fare": float(b.fare)}
+            for b in station.fare_bands.all()
+        ],
         "created_at": station.created_at.isoformat() if station.created_at else None,
         "updated_at": station.updated_at.isoformat() if station.updated_at else None,
     }
@@ -133,7 +137,7 @@ def station_record(station):
 def _local_stations(active_only=True):
     from .models import CargoStation
 
-    qs = CargoStation.objects.all().order_by("name")
+    qs = CargoStation.objects.prefetch_related("fare_bands").order_by("name")
     if active_only:
         qs = qs.filter(is_active=True)
     return [station_record(s) for s in qs]
@@ -198,6 +202,7 @@ class CargoCenterListView(generics.GenericAPIView):
                 "longitude": item.get("longitude"),
                 "price_per_km": item.get("price_per_km"),
                 "min_fare": item.get("min_fare"),
+                "fare_bands": item.get("fare_bands") or [],
                 "created_at": item.get("created_at"),
                 "updated_at": item.get("updated_at"),
             })
@@ -226,6 +231,7 @@ class CargoCenterDetailView(generics.GenericAPIView):
                     "longitude": item.get("longitude"),
                     "price_per_km": item.get("price_per_km"),
                     "min_fare": item.get("min_fare"),
+                    "fare_bands": item.get("fare_bands") or [],
                     "created_at": item.get("created_at"),
                     "updated_at": item.get("updated_at"),
                 })

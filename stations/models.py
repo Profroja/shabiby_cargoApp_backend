@@ -31,3 +31,26 @@ class CargoStation(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class StationFareBand(models.Model):
+    """Pickup fare for trips to a station within a distance range, e.g. 0–3 km = 2,000.
+    When a station has bands they set the fare; otherwise its price per km does."""
+
+    id = models.BigAutoField(primary_key=True)
+    station = models.ForeignKey(CargoStation, on_delete=models.CASCADE, related_name="fare_bands")
+    min_km = models.DecimalField(max_digits=8, decimal_places=2)
+    max_km = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True, help_text="Empty = and above."
+    )
+    fare = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["min_km"]
+
+    def covers(self, km):
+        return self.min_km <= km and (self.max_km is None or km < self.max_km)
+
+    def __str__(self):
+        return f"{self.station_id}: {self.min_km}–{self.max_km or '…'} km = {self.fare}"

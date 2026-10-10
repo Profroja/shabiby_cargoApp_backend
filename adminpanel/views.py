@@ -14,7 +14,7 @@ from drivers.models import Driver, DriverFeedback, DriverPayment, DriverSubscrip
 from drivers.performance import LEVELS, accounts_for, driver_account, trip_split
 from farezones.models import FareZone
 from orders.models import CargoOrder
-from stations.models import CargoStation
+from stations.models import CargoStation, StationFareBand
 from stations.views import _fetch_cargo_centers, fetch_external_for_import
 from trips.models import CargoTrip
 
@@ -461,7 +461,7 @@ def _parse_station_form(post):
 
 
 def _station_page(request, error=None, form=None, status=200):
-    stations = CargoStation.objects.select_related("zone").order_by("name")
+    stations = CargoStation.objects.select_related("zone").prefetch_related("fare_bands").order_by("name")
     return render(
         request,
         "adminpanel/stations.html",
@@ -889,3 +889,37 @@ def driver_set_station(request, pk):
     driver.region = station.name if station else ""
     driver.save(update_fields=["station", "region", "updated_at"])
     return JsonResponse({"ok": True, "station": station.name if station else ""})
+
+
+@login_required
+@user_passes_test(is_admin)
+def station_band_add(request, pk):
+    """Add a distance range + fare to a station."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    station = get_object_or_404(CargoStation, pk=pk)
+    try:
+        min_km = _money(request.POST.get("min_km") or "0", "From (km)", allow_zero=True)
+        raw_max = request.POST.get("max_km", "").strip()
+        max_km = _money(raw_max, "To (km)") if raw_max else None
+        fare = _money(request.POST.get("fare", ""), "Fare")
+        if max_km is not None and max_km <= min_km:
+            raise ValueError("'To' must be more than 'From'.")
+        for band in station.fare_bands.all():
+            hi = band.max_km if band.max_km is not None else Decimal("1e9")
+            new_hi = max_km if max_km is not None else Decimal("1e9")
+            if min_km < hi and band.min_km < new_hi:
+                raise ValueError(f"Overlaps the existing range {band.min_km}–{band.max_km or '…'} km.")
+    except ValueError as e:
+        return _json_error(e)
+    StationFareBand.objects.create(station=station, min_km=min_km, max_km=max_km, fare=fare)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_admin)
+def station_band_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    get_object_or_404(StationFareBand, pk=pk).delete()
+    return JsonResponse({"ok": True})

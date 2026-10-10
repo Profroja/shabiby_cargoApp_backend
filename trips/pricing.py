@@ -23,10 +23,26 @@ def station_rates(station_id):
     return price, min_fare
 
 
+def band_fare(station_id, distance_km):
+    """Fare from the station's distance bands, or None when no band covers the distance."""
+    from stations.models import StationFareBand
+
+    try:
+        bands = list(StationFareBand.objects.filter(station_id=station_id))
+    except (ValidationError, ValueError):
+        return None
+    km = Decimal(str(distance_km or 0))
+    return next((b.fare for b in bands if b.covers(km)), None)
+
+
 def pickup_fare(station_id, distance_km, vehicle_type):
-    """distance (at least 1 km) x station price per km x vehicle multiplier, whole TZS."""
+    """Band fare for the distance (if the station has one), else distance (at least 1 km)
+    x price per km; times the vehicle multiplier, whole TZS, never below the minimum."""
     price, min_fare = station_rates(station_id)
     distance = max(Decimal(str(distance_km or 0)), Decimal("1"))
     multiplier = VEHICLE_FARE_MULTIPLIERS.get(int(vehicle_type or 1), Decimal("1"))
-    fare = (distance * price * multiplier).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    base = band_fare(station_id, distance)
+    if base is None:
+        base = distance * price
+    fare = (base * multiplier).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     return max(fare, min_fare)

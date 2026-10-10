@@ -1,5 +1,32 @@
 {% extends "adminpanel/base.html" %}
-{% block title %}Cargo Stations{% endblock %}
+{% block title %}Cargo Stations
+<div class="modal fade" id="faresModal" tabindex="-1" aria-labelledby="faresTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="faresTitle"><i class="bi bi-cash-coin"></i> Trip Fares · <span id="faresStation"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">
+                    The customer's pickup fare comes from the range their distance falls in (Boda ×1, Guta ×2, Van ×3).
+                    Distances outside every range use the station's price per km.
+                </p>
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>From</th><th>To</th><th class="text-end">Fare</th><th></th></tr></thead>
+                    <tbody id="faresRows"></tbody>
+                </table>
+                <form id="bandForm" class="row g-2 align-items-end" onsubmit="addBand(event)">
+                    <div class="col-sm-3"><label class="form-label small">From (km)</label><input name="min_km" class="form-control" inputmode="decimal" required placeholder="0"></div>
+                    <div class="col-sm-3"><label class="form-label small">To (km)</label><input name="max_km" class="form-control" inputmode="decimal" placeholder="empty = and above"></div>
+                    <div class="col-sm-4"><label class="form-label small">Fare (TSh)</label><input name="fare" class="form-control" inputmode="decimal" required placeholder="e.g. 2000"></div>
+                    <div class="col-sm-2"><button class="btn btn-primary w-100"><i class="bi bi-plus"></i> Add</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4 gap-2 flex-wrap">
     <h2 class="mb-0">Cargo Stations</h2>
@@ -143,6 +170,7 @@
                     <td>
                         {% if station.price_per_km is not None %}TSh {{ station.price_per_km|floatformat:0 }}{% else %}<span class="text-muted">Default ({{ default_price_per_km }})</span>{% endif %}
                         {% if station.min_fare %}<div class="small text-muted">min TSh {{ station.min_fare|floatformat:0 }}</div>{% endif %}
+                        {% with n=station.fare_bands.all|length %}{% if n %}<div class="small text-success">{{ n }} fare range{{ n|pluralize }} set</div>{% else %}<div class="small text-warning">No fare ranges</div>{% endif %}{% endwith %}
                     </td>
                     <td>{{ station.zone.name|default:"—" }}</td>
                     <td>
@@ -153,6 +181,20 @@
                         {% endif %}
                     </td>
                     <td class="text-nowrap">
+                        <button class="btn btn-sm btn-primary py-1" title="Trip fares"
+                                onclick="openFares('{{ station.pk }}', '{{ station.name|escapejs }}')">
+                            <i class="bi bi-cash-coin"></i> Trip Fares
+                        </button>
+                        <template id="bands-{{ station.pk }}">
+                            {% for b in station.fare_bands.all %}
+                            <tr>
+                                <td>{{ b.min_km|floatformat:"-2" }} km</td>
+                                <td>{% if b.max_km is not None %}{{ b.max_km|floatformat:"-2" }} km{% else %}and above{% endif %}</td>
+                                <td class="text-end fw-semibold">TSh {{ b.fare|floatformat:0 }}</td>
+                                <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger py-0" onclick="deleteBand({{ b.pk }})"><i class="bi bi-trash"></i></button></td>
+                            </tr>
+                            {% endfor %}
+                        </template>
                         <a href="{% url 'adminpanel:station-edit' station.pk %}" class="btn btn-sm btn-outline-primary py-1" title="Edit">
                             <i class="bi bi-pencil"></i>
                         </a>
@@ -220,6 +262,53 @@ async function toggleStation(pk, name, isActive) {
         swalError(err.message);
     }
 }
+
+let faresStationId = null;
+
+function openFares(pk, name) {
+    faresStationId = pk;
+    sessionStorage.setItem('openFares', JSON.stringify({ pk, name }));
+    document.getElementById('faresStation').textContent = name;
+    const rows = document.getElementById(`bands-${pk}`).innerHTML.trim();
+    document.getElementById('faresRows').innerHTML = rows || '<tr><td colspan="4" class="text-muted">No ranges yet. Add the first one below.</td></tr>';
+    const form = document.getElementById('bandForm');
+    form.reset();
+    // Suggest continuing from the last range.
+    const lastTo = [...document.querySelectorAll('#faresRows td:nth-child(2)')].map((td) => parseFloat(td.textContent)).filter((n) => !isNaN(n)).pop();
+    if (lastTo !== undefined) form.min_km.value = lastTo;
+    bootstrap.Modal.getOrCreateInstance('#faresModal').show();
+}
+
+async function addBand(event) {
+    event.preventDefault();
+    try {
+        await panelPost(`/panel/stations/${faresStationId}/fares/add/`, Object.fromEntries(new FormData(event.target)));
+        location.reload();
+    } catch (err) {
+        swalError(err.message);
+    }
+}
+
+async function deleteBand(id) {
+    const ok = await swalConfirm('This fare range will be removed.', { title: 'Delete range?', confirmText: 'Delete', danger: true });
+    if (!ok) return;
+    try {
+        await panelPost(`/panel/station-fares/${id}/delete/`);
+        location.reload();
+    } catch (err) {
+        swalError(err.message);
+    }
+}
+
+// Reopen the fares popup after adding/deleting (the page reloads).
+document.addEventListener('DOMContentLoaded', () => {
+    const open = sessionStorage.getItem('openFares');
+    if (!open) return;
+    sessionStorage.removeItem('openFares');
+    const { pk, name } = JSON.parse(open);
+    if (document.getElementById(`bands-${pk}`)) openFares(pk, name);
+});
+document.getElementById('faresModal').addEventListener('hidden.bs.modal', () => sessionStorage.removeItem('openFares'));
 
 async function deleteStation(pk, name) {
     const ok = await swalConfirm('Customers will no longer be able to choose it.', { title: `Delete station "${name}"?`, confirmText: 'Delete', danger: true });
