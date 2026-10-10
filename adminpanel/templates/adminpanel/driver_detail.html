@@ -217,7 +217,8 @@
                             <th>Customer</th>
                             <th>Pickup → Station</th>
                             <th class="text-end">Km</th>
-                            <th class="text-end">Fare collected</th>
+                            <th class="text-end">Pickup fare</th>
+                            <th class="text-end">Shipping fare</th>
                             <th class="text-end">Driver earned</th>
                             <th class="text-end">Company share</th>
                             <th>Status</th>
@@ -234,9 +235,10 @@
                             </td>
                             <td class="text-end">{{ trip.distance_km|default:"—" }}</td>
                             <td class="text-end">{{ trip.fare_amount|tzs }}</td>
+                            <td class="text-end">{{ trip.order.shipping_fare|tzs }}</td>
                             {% if trip.status == 'delivered_to_station' %}
                             <td class="text-end text-success">{{ trip.split_driver|tzs }}</td>
-                            <td class="text-end fw-semibold">{{ trip.split_company|tzs }}</td>
+                            <td class="text-end fw-semibold" title="Company share of the pickup fare + shipping fare">{{ trip.split_company|tzs }}{% if trip.order.shipping_fare %}<div class="small text-muted">+ {{ trip.order.shipping_fare|tzs }} shipping</div>{% endif %}</td>
                             <td><span class="badge bg-success">Delivered</span></td>
                             {% else %}
                             <td class="text-end text-muted">—</td>
@@ -248,7 +250,7 @@
                             {% endif %}
                         </tr>
                         {% empty %}
-                        <tr><td colspan="8" class="text-center text-muted py-4">No trips yet.</td></tr>
+                        <tr><td colspan="9" class="text-center text-muted py-4">No trips yet.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -264,7 +266,8 @@
         <div class="row g-3 mb-3">
             <div class="col-md-6">
                 <div class="card stat-card"><div class="card-body">
-                    <div class="d-flex justify-content-between"><span class="text-muted">Trip commission owed</span><strong>{{ account.company_total|tzs }}</strong></div>
+                    <div class="d-flex justify-content-between"><span class="text-muted">Company share of pickup fares</span><strong>{{ account.pickup_company_total|tzs }}</strong></div>
+                    <div class="d-flex justify-content-between"><span class="text-muted">Shipping fares collected</span><strong>{{ account.shipping_total|tzs }}</strong></div>
                     <div class="d-flex justify-content-between"><span class="text-muted">Paid</span><strong class="text-success">− {{ account.commission_paid|tzs }}</strong></div>
                     <hr class="my-2">
                     <div class="d-flex justify-content-between"><span>Balance</span><strong class="{% if account.commission_due > 0 %}text-danger{% endif %}">{{ account.commission_due|tzs }}</strong></div>

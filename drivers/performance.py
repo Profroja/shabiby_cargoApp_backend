@@ -95,12 +95,14 @@ def can_accept_trips(driver):
 
 def _account(driver, trips, payments, periods, feedback, today):
     completed = [t for t in trips if t.status == "delivered_to_station"]
-    fares = earnings = company = ZERO
+    fares = earnings = company = shipping = ZERO
     for trip in completed:
         fare, earning, share = trip_split(trip)
         fares += fare
         earnings += earning
         company += share
+        # The driver also collects the shipping fare, all of which belongs to the company.
+        shipping += trip.order.shipping_fare or ZERO
 
     commission_paid = sum((p.amount for p in payments if p.kind == "commission"), ZERO)
     subscription_paid = sum((p.amount for p in payments if p.kind == "subscription"), ZERO)
@@ -110,13 +112,15 @@ def _account(driver, trips, payments, periods, feedback, today):
     open_issues = sum(1 for f in feedback if f.category == "issue" and not f.is_resolved)
     level = driver_level(len(completed), driver.rating_avg, open_issues)
 
-    commission_due = company - commission_paid
+    commission_due = company + shipping - commission_paid
     subscription_due = subscription_fees - subscription_paid
     return {
         "completed_trips": len(completed),
         "fares_total": fares,
         "earnings_total": earnings,
-        "company_total": company,
+        "company_total": company + shipping,
+        "pickup_company_total": company,
+        "shipping_total": shipping,
         "commission_paid": commission_paid,
         "commission_due": commission_due,
         "subscription_fees": subscription_fees,
@@ -137,7 +141,7 @@ def driver_account(driver):
     today = timezone.localdate()
     return _account(
         driver,
-        list(driver.trips.all()),
+        list(driver.trips.select_related("order")),
         list(driver.payments.all()),
         list(driver.subscriptions.all()),
         list(driver.feedback.all()),
@@ -154,7 +158,7 @@ def accounts_for(drivers):
     drivers = list(drivers)
     ids = [d.id for d in drivers]
     grouped = {name: defaultdict(list) for name in ("trips", "payments", "periods", "feedback")}
-    for t in CargoTrip.objects.filter(driver_id__in=ids, status="delivered_to_station"):
+    for t in CargoTrip.objects.filter(driver_id__in=ids, status="delivered_to_station").select_related("order"):
         grouped["trips"][t.driver_id].append(t)
     for p in DriverPayment.objects.filter(driver_id__in=ids):
         grouped["payments"][p.driver_id].append(p)
