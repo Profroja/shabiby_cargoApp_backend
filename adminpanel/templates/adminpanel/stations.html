@@ -1,32 +1,5 @@
 {% extends "adminpanel/base.html" %}
-{% block title %}Cargo Stations
-<div class="modal fade" id="faresModal" tabindex="-1" aria-labelledby="faresTitle" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="faresTitle"><i class="bi bi-cash-coin"></i> Trip Fares · <span id="faresStation"></span></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted small">
-                    The customer's pickup fare comes from the range their distance falls in (Boda ×1, Guta ×2, Van ×3).
-                    Distances outside every range use the station's price per km.
-                </p>
-                <table class="table table-sm align-middle">
-                    <thead><tr><th>From</th><th>To</th><th class="text-end">Fare</th><th></th></tr></thead>
-                    <tbody id="faresRows"></tbody>
-                </table>
-                <form id="bandForm" class="row g-2 align-items-end" onsubmit="addBand(event)">
-                    <div class="col-sm-3"><label class="form-label small">From (km)</label><input name="min_km" class="form-control" inputmode="decimal" required placeholder="0"></div>
-                    <div class="col-sm-3"><label class="form-label small">To (km)</label><input name="max_km" class="form-control" inputmode="decimal" placeholder="empty = and above"></div>
-                    <div class="col-sm-4"><label class="form-label small">Fare (TSh)</label><input name="fare" class="form-control" inputmode="decimal" required placeholder="e.g. 2000"></div>
-                    <div class="col-sm-2"><button class="btn btn-primary w-100"><i class="bi bi-plus"></i> Add</button></div>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
+{% block title %}Cargo Stations{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4 gap-2 flex-wrap">
     <h2 class="mb-0">Cargo Stations</h2>
@@ -224,6 +197,32 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+</div>
+<div class="modal fade" id="faresModal" tabindex="-1" aria-labelledby="faresTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="faresTitle"><i class="bi bi-cash-coin"></i> Trip Fares · <span id="faresStation"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">
+                    The customer's pickup fare comes from the range their distance falls in (Boda ×1, Guta ×2, Van ×3).
+                    Distances outside every range use the station's price per km.
+                </p>
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>From</th><th>To</th><th class="text-end">Fare</th><th></th></tr></thead>
+                    <tbody id="faresRows"></tbody>
+                </table>
+                <form id="bandForm" class="row g-2 align-items-end" onsubmit="addBand(event)">
+                    <div class="col-sm-3"><label class="form-label small">From (km)</label><input name="min_km" class="form-control" inputmode="decimal" required placeholder="0"></div>
+                    <div class="col-sm-3"><label class="form-label small">To (km)</label><input name="max_km" class="form-control" inputmode="decimal" placeholder="empty = and above"></div>
+                    <div class="col-sm-4"><label class="form-label small">Fare (TSh)</label><input name="fare" class="form-control" inputmode="decimal" required placeholder="e.g. 2000"></div>
+                    <div class="col-sm-2"><button class="btn btn-primary w-100"><i class="bi bi-plus"></i> Add</button></div>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
