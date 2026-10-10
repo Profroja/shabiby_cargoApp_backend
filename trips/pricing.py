@@ -32,7 +32,12 @@ def band_fare(station_id, distance_km):
     except (ValidationError, ValueError):
         return None
     km = Decimal(str(distance_km or 0))
-    return next((b.fare for b in bands if b.covers(km)), None)
+    # Ranges in order; a distance uses the first range it doesn't exceed, so small
+    # gaps between ranges (e.g. 0–1 then 1.1–2 for 1.05 km) still get a fare.
+    for band in sorted(bands, key=lambda b: b.min_km):
+        if band.max_km is None or km <= band.max_km:
+            return band.fare
+    return None
 
 
 def pickup_fare(station_id, distance_km, vehicle_type):
