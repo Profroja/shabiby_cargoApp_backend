@@ -84,6 +84,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'adminpanel.context_processors.google_maps',
             ],
         },
     },
@@ -194,3 +195,11 @@ REST_FRAMEWORK = {
 # How long an SMS verification code stays valid. SMS delivery can be slow,
 # so keep this generous.
 OTP_EXPIRY_MINUTES = 10
+
+# Send our origin (not full URLs) to other sites, so a referrer-restricted
+# Google key recognises the admin panel. Django's default "same-origin" sends nothing.
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# Google Maps JavaScript API key for the admin panel's station map.
+# Same project key as the mobile apps; override with GOOGLE_MAPS_API_KEY in .env.
+GOOGLE_MAPS_API_KEY = env("GOOGLE_MAPS_API_KEY", default="AIzaSyCOykpOCnMYQ8F4Ry8Ae-OrzSEkxSP7vXs")

@@ -169,60 +169,60 @@
             padding: 5px 15px;
         }
     </style>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}"></script>
     <style>
         .pin-map { height: 340px; border-radius: 10px; border: 1px solid #dee2e6; }
         .pin-map-hint { font-size: 0.8rem; color: #6c757d; margin-top: 6px; }
     </style>
     <script>
     /**
-     * Map where the admin drags (or clicks) a pin to set a station's exact location.
+     * Google map where the admin drags (or clicks) a pin to set a station's exact location.
      * Keeps the latitude/longitude inputs and the pin in sync both ways.
      */
     function initPinPicker(mapEl, latInput, lngInput) {
-        const TANZANIA = [-6.37, 34.89];
-        const street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19, attribution: '&copy; OpenStreetMap',
-        });
-        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19, attribution: 'Imagery &copy; Esri',
-        });
-        const map = L.map(mapEl, { layers: [street] }).setView(TANZANIA, 6);
-        L.control.layers({ 'Street': street, 'Satellite': satellite }).addTo(map);
-
-        const pinIcon = L.divIcon({
-            className: '',
-            html: '<i class="bi bi-geo-alt-fill" style="font-size: 2.2rem; color: #B6024E; text-shadow: 0 1px 3px rgba(0,0,0,.4);"></i>',
-            iconSize: [36, 36],
-            iconAnchor: [18, 34],
+        if (!window.google || !google.maps) {
+            mapEl.innerHTML = '<div class="p-3 text-muted small">Google Maps could not load. Check the API key and that the Maps JavaScript API is enabled.</div>';
+            return { refresh() {} };
+        }
+        const TANZANIA = { lat: -6.37, lng: 34.89 };
+        const map = new google.maps.Map(mapEl, {
+            center: TANZANIA,
+            zoom: 6,
+            mapTypeControl: true,
+            mapTypeControlOptions: { mapTypeIds: ['roadmap', 'hybrid'] },
+            streetViewControl: false,
+            fullscreenControl: true,
+            clickableIcons: false,
         });
         let marker = null;
 
-        function writeInputs(latlng) {
-            latInput.value = latlng.lat.toFixed(6);
-            lngInput.value = latlng.lng.toFixed(6);
+        function writeInputs(pos) {
+            latInput.value = pos.lat().toFixed(6);
+            lngInput.value = pos.lng().toFixed(6);
         }
 
-        function placePin(latlng, zoom) {
+        function placePin(pos, zoom) {
             if (!marker) {
-                marker = L.marker(latlng, { draggable: true, icon: pinIcon, autoPan: true }).addTo(map);
-                marker.on('dragend', () => writeInputs(marker.getLatLng()));
+                marker = new google.maps.Marker({ position: pos, map, draggable: true, title: 'Drag to the exact location' });
+                marker.addListener('dragend', () => writeInputs(marker.getPosition()));
             } else {
-                marker.setLatLng(latlng);
+                marker.setPosition(pos);
             }
-            if (zoom) map.setView(latlng, Math.max(map.getZoom(), zoom));
+            if (zoom) {
+                map.setCenter(pos);
+                if (map.getZoom() < zoom) map.setZoom(zoom);
+            }
         }
 
-        map.on('click', (e) => {
-            placePin(e.latlng);
-            writeInputs(e.latlng);
+        map.addListener('click', (e) => {
+            placePin(e.latLng);
+            writeInputs(e.latLng);
         });
 
         function readInputs() {
             const lat = parseFloat(latInput.value), lng = parseFloat(lngInput.value);
             if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-                placePin(L.latLng(lat, lng), 17);
+                placePin(new google.maps.LatLng(lat, lng), 17);
             }
         }
         latInput.addEventListener('change', readInputs);
@@ -232,7 +232,7 @@
         return {
             /** Call after the map's container becomes visible (e.g. a modal opens). */
             refresh() {
-                map.invalidateSize();
+                google.maps.event.trigger(map, 'resize');
                 readInputs();
             },
         };
