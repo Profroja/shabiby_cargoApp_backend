@@ -74,11 +74,12 @@
     <div class="col-lg-6">
         <div class="card stat-card h-100">
             <div class="card-body d-flex flex-column">
-                <h6 class="card-title">Map preview</h6>
-                <p class="text-muted small">Check the pin is on the station before saving.</p>
-                <iframe id="preview" class="flex-grow-1 rounded border" style="min-height: 320px; width: 100%;"
-                        loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-                <p id="no-coords" class="text-muted text-center my-auto d-none">Enter coordinates to see the location.</p>
+                <h6 class="card-title">Exact location</h6>
+                <div id="pinMap" class="pin-map flex-grow-1"></div>
+                <div class="pin-map-hint">
+                    <i class="bi bi-hand-index"></i> Drag the pin, or click on the map, to set the station's exact spot.
+                    Switch to <strong>Satellite</strong> (top-right) to see the buildings.
+                </div>
             </div>
         </div>
     </div>
@@ -89,27 +90,15 @@
 <script>
 const lat = document.getElementById('lat');
 const lng = document.getElementById('lng');
-const preview = document.getElementById('preview');
-const noCoords = document.getElementById('no-coords');
-
-function updatePreview() {
-    const la = parseFloat(lat.value), lo = parseFloat(lng.value);
-    const ok = !isNaN(la) && !isNaN(lo);
-    preview.classList.toggle('d-none', !ok);
-    noCoords.classList.toggle('d-none', ok);
-    if (ok) preview.src = `https://maps.google.com/maps?q=${la},${lo}&z=16&output=embed`;
-}
+const picker = initPinPicker(document.getElementById('pinMap'), lat, lng);
 
 document.getElementById('paste').addEventListener('input', (e) => {
     const parts = e.target.value.split(',').map((p) => p.trim());
     if (parts.length === 2 && !isNaN(parseFloat(parts[0])) && !isNaN(parseFloat(parts[1]))) {
         lat.value = parts[0];
         lng.value = parts[1];
-        updatePreview();
+        picker.refresh();
     }
 });
-lat.addEventListener('change', updatePreview);
-lng.addEventListener('change', updatePreview);
-updatePreview();
 </script>
 {% endblock %}

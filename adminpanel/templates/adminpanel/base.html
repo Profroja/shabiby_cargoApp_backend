@@ -169,6 +169,75 @@
             padding: 5px 15px;
         }
     </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <style>
+        .pin-map { height: 340px; border-radius: 10px; border: 1px solid #dee2e6; }
+        .pin-map-hint { font-size: 0.8rem; color: #6c757d; margin-top: 6px; }
+    </style>
+    <script>
+    /**
+     * Map where the admin drags (or clicks) a pin to set a station's exact location.
+     * Keeps the latitude/longitude inputs and the pin in sync both ways.
+     */
+    function initPinPicker(mapEl, latInput, lngInput) {
+        const TANZANIA = [-6.37, 34.89];
+        const street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19, attribution: '&copy; OpenStreetMap',
+        });
+        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19, attribution: 'Imagery &copy; Esri',
+        });
+        const map = L.map(mapEl, { layers: [street] }).setView(TANZANIA, 6);
+        L.control.layers({ 'Street': street, 'Satellite': satellite }).addTo(map);
+
+        const pinIcon = L.divIcon({
+            className: '',
+            html: '<i class="bi bi-geo-alt-fill" style="font-size: 2.2rem; color: #B6024E; text-shadow: 0 1px 3px rgba(0,0,0,.4);"></i>',
+            iconSize: [36, 36],
+            iconAnchor: [18, 34],
+        });
+        let marker = null;
+
+        function writeInputs(latlng) {
+            latInput.value = latlng.lat.toFixed(6);
+            lngInput.value = latlng.lng.toFixed(6);
+        }
+
+        function placePin(latlng, zoom) {
+            if (!marker) {
+                marker = L.marker(latlng, { draggable: true, icon: pinIcon, autoPan: true }).addTo(map);
+                marker.on('dragend', () => writeInputs(marker.getLatLng()));
+            } else {
+                marker.setLatLng(latlng);
+            }
+            if (zoom) map.setView(latlng, Math.max(map.getZoom(), zoom));
+        }
+
+        map.on('click', (e) => {
+            placePin(e.latlng);
+            writeInputs(e.latlng);
+        });
+
+        function readInputs() {
+            const lat = parseFloat(latInput.value), lng = parseFloat(lngInput.value);
+            if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+                placePin(L.latLng(lat, lng), 17);
+            }
+        }
+        latInput.addEventListener('change', readInputs);
+        lngInput.addEventListener('change', readInputs);
+        readInputs();
+
+        return {
+            /** Call after the map's container becomes visible (e.g. a modal opens). */
+            refresh() {
+                map.invalidateSize();
+                readInputs();
+            },
+        };
+    }
+    </script>
 </head>
 <body>
     <div class="sidebar">
