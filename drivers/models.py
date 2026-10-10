@@ -58,3 +58,4 @@ class Driver(models.Model):
 
 
 from .rating_models import DriverRating  # noqa: E402,F401
+from .account_models import DriverFeedback, DriverPayment, DriverSubscription  # noqa: E402,F401

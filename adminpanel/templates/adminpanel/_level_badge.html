@@ -1,0 +1,2 @@
+{% comment %}Driver level badge. Usage: {% include "adminpanel/_level_badge.html" with level=account.level %}{% endcomment %}
+<span class="badge" style="background: {{ level.color }};" title="Driver level {{ level.level }}"><i class="bi bi-award"></i> L{{ level.level }} · {{ level.name }}</span>

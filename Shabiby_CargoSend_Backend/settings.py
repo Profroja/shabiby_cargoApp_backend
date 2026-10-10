@@ -84,7 +84,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'adminpanel.context_processors.google_maps',
+                'adminpanel.context_processors.panel_settings',
             ],
         },
     },
@@ -203,3 +203,8 @@ SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 # Google Maps JavaScript API key for the admin panel's station map.
 # Same project key as the mobile apps; override with GOOGLE_MAPS_API_KEY in .env.
 GOOGLE_MAPS_API_KEY = env("GOOGLE_MAPS_API_KEY", default="AIzaSyCOykpOCnMYQ8F4Ry8Ae-OrzSEkxSP7vXs")
+
+# Pickup fare per km when a cargo station has no price of its own (TZS).
+DEFAULT_PRICE_PER_KM = 600
+# Driver's share of a pickup fare (%) when no commission band matches the distance.
+DEFAULT_DRIVER_SHARE_PERCENT = 85

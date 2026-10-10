@@ -175,6 +175,8 @@ class CargoTripSerializer(serializers.ModelSerializer):
         return str(percent)
 
     def get_driver_commission_amount(self, obj):
+        if obj.driver_earning is not None:
+            return str(obj.driver_earning)
         _percent, amount = get_driver_commission(obj.distance_km, obj.fare_amount)
         if amount is None:
             return None

@@ -16,6 +16,10 @@ class CargoStation(models.Model):
         "farezones.FareZone", on_delete=models.PROTECT,
         related_name="stations", null=True, blank=True,
     )
+    # Pickup fare for trips to this station: distance x price_per_km x vehicle
+    # multiplier, never below min_fare. Empty = settings.DEFAULT_PRICE_PER_KM / no minimum.
+    price_per_km = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    min_fare = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

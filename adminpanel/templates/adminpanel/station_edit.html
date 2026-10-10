@@ -50,6 +50,17 @@
                         <div class="form-text">Right-click the station in Google Maps and click the coordinates to copy them, then paste here.</div>
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label">Pickup price per km (TSh)</label>
+                        <input name="price_per_km" class="form-control" inputmode="decimal"
+                               value="{{ station.price_per_km|default_if_none:'' }}" placeholder="Default {{ default_price_per_km }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Minimum pickup fare (TSh)</label>
+                        <input name="min_fare" class="form-control" inputmode="decimal"
+                               value="{{ station.min_fare|default_if_none:'' }}" placeholder="Optional">
+                        <div class="form-text">Pickup fare = distance × price per km × vehicle (Boda ×1, Guta ×2, Van ×3).</div>
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label">Fare zone</label>
                         <select name="zone" class="form-select">
                             <option value="">—</option>

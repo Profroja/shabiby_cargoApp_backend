@@ -75,6 +75,38 @@ class DriverProfileSerializer(serializers.ModelSerializer):
         return None
 
 
+class DriverMeSerializer(DriverProfileSerializer):
+    """The logged-in driver's profile plus their standing with the company."""
+
+    account = serializers.SerializerMethodField()
+
+    class Meta(DriverProfileSerializer.Meta):
+        fields = DriverProfileSerializer.Meta.fields + ("account",)
+
+    def get_account(self, obj):
+        from .performance import driver_account
+
+        a = driver_account(obj)
+        sub = a["subscription"]
+        level = a["level"]
+        return {
+            "level": level["level"],
+            "level_name": level["name"],
+            "next_level_name": level["next"]["name"] if level["next"] else None,
+            "next_level_needs": level["needs"],
+            "completed_trips": a["completed_trips"],
+            "fares_total": str(a["fares_total"]),
+            "earnings_total": str(a["earnings_total"]),
+            "company_total": str(a["company_total"]),
+            "paid_total": str(a["paid_total"]),
+            "balance_due": str(a["balance_due"]),
+            "subscription_status": a["subscription_status"],
+            "subscription_ends_on": sub.ends_on.isoformat() if sub and sub.ends_on else None,
+            "subscription_days_left": a["subscription_days_left"],
+            "can_accept_trips": a["subscription_status"] != "expired",
+        }
+
+
 class DriverRegistrationSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=80)
     middle_name = serializers.CharField(max_length=80, required=False, allow_blank=True, default="")

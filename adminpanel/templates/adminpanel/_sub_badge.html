@@ -1,0 +1,10 @@
+{% comment %}Subscription status badge. Usage: {% include "adminpanel/_sub_badge.html" with a=account %}{% endcomment %}
+{% if a.subscription_status == 'free' %}
+<span class="badge bg-success" title="Free subscription"><i class="bi bi-gift"></i> Free{% if a.subscription.ends_on %} · until {{ a.subscription.ends_on|date:"M d, Y" }}{% endif %}</span>
+{% elif a.subscription_status == 'paid' %}
+<span class="badge bg-primary" title="Paid subscription"><i class="bi bi-patch-check"></i> Paid{% if a.subscription.ends_on %} · until {{ a.subscription.ends_on|date:"M d, Y" }}{% endif %}</span>
+{% elif a.subscription_status == 'expired' %}
+<span class="badge bg-danger" title="Cannot accept trips"><i class="bi bi-exclamation-octagon"></i> Expired</span>
+{% else %}
+<span class="badge bg-light text-dark border" title="No subscription set; the driver can still work"><i class="bi bi-dash-circle"></i> Not set</span>
+{% endif %}

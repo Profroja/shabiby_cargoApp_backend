@@ -29,11 +29,6 @@ class DriverRating(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Recalculate driver's average rating
-        from django.db.models import Avg, Count
-        agg = DriverRating.objects.filter(driver=self.driver).aggregate(
-            avg=Avg("stars"), count=Count("id")
-        )
-        self.driver.rating_avg = round(agg["avg"] or 5.0, 2)
-        self.driver.rating_count = agg["count"] or 0
-        self.driver.save(update_fields=["rating_avg", "rating_count"])
+        from .performance import recalc_rating
+
+        recalc_rating(self.driver)

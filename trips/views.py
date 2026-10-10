@@ -5,13 +5,16 @@ from django.db.models import Q
 from django.utils import timezone as tz_utils
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from drivers.models import Driver
+from drivers.performance import can_accept_trips, trip_split
 from orders.models import CargoOrder
 
 from .models import CargoTrip, TripDecline
+from .pricing import pickup_fare
 from .serializers import CargoTripSerializer
 
 logger = logging.getLogger(__name__)
@@ -22,6 +25,14 @@ class CargoTripListView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return CargoTrip.objects.filter(order__customer=self.request.user).order_by("-created_at")
+
+    def perform_create(self, serializer):
+        data = serializer.validated_data
+        if data["order"].customer_id != self.request.user.id:
+            raise PermissionDenied("You can only request trips for your own orders.")
+        # The price comes from the station's rate, not from the app.
+        fare = pickup_fare(data.get("destination_station"), data.get("distance_km"), data.get("vehicle_type"))
+        serializer.save(fare_amount=fare)
 
     def create(self, request, *args, **kwargs):
         logger.error(f"[CargoTripListView] POST data: {request.data}")
@@ -158,6 +169,12 @@ def accept_trip(request, pk):
     if driver.approval_status != "approved":
         return Response({"error": "Driver not approved yet."}, status=status.HTTP_403_FORBIDDEN)
 
+    if not can_accept_trips(driver):
+        return Response(
+            {"error": "Your subscription has expired. Contact Shabiby Cargo to renew it before accepting trips."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     trip = CargoTrip.objects.filter(pk=pk, driver__isnull=True, status__in=["requested", "searching_driver"]).first()
     if not trip:
         return Response({"error": "Trip not available."}, status=status.HTTP_404_NOT_FOUND)
@@ -197,6 +214,17 @@ def decline_trip(request, pk):
     return Response({"ok": True}, status=status.HTTP_200_OK)
 
 
+# Steps a driver moves an accepted trip through. A trip only ever moves forward.
+TRIP_FLOW = [
+    "driver_assigned",
+    "en_route_to_pickup",
+    "arrived_at_pickup",
+    "picked_up",
+    "arrived_at_station",
+    "delivered_to_station",
+]
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_trip_status(request, pk):
@@ -225,6 +253,15 @@ def update_trip_status(request, pk):
     if new_status not in valid_statuses:
         return Response({"error": f"Invalid status. Must be one of: {valid_statuses}"}, status=status.HTTP_400_BAD_REQUEST)
 
+    if new_status == trip.status:
+        # A repeated request (e.g. the app retrying): nothing changes.
+        return Response(CargoTripSerializer(trip, context={"request": request}).data, status=status.HTTP_200_OK)
+    if trip.status in ("delivered_to_station", "cancelled"):
+        return Response({"error": "This trip is already finished."}, status=status.HTTP_400_BAD_REQUEST)
+    current_step = TRIP_FLOW.index(trip.status) if trip.status in TRIP_FLOW else -1
+    if new_status != "cancelled" and TRIP_FLOW.index(new_status) < current_step:
+        return Response({"error": "A trip can't go back to an earlier step."}, status=status.HTTP_400_BAD_REQUEST)
+
     now = tz_utils.now()
     update_fields = ["status", "updated_at"]
 
@@ -240,24 +277,28 @@ def update_trip_status(request, pk):
         update_fields.append("arrived_at_station_at")
     elif new_status == "delivered_to_station":
         trip.delivered_at = now
-        update_fields.append("delivered_at")
+        _fare, trip.driver_earning, trip.company_share = trip_split(trip)
+        update_fields += ["delivered_at", "driver_earning", "company_share"]
     elif new_status == "cancelled":
         trip.cancelled_at = now
         update_fields.append("cancelled_at")
 
     trip.save(update_fields=update_fields)
 
-    # Update order status based on trip status
+    # Move the order forward with the trip. Orders never move back: once station
+    # staff have dispatched an order, a late update from the driver can't undo that.
     order = trip.order
-    if new_status == "picked_up":
-        if order.status != CargoOrder.Status.PICKUP_IN_PROGRESS:
-            order.status = CargoOrder.Status.PICKUP_IN_PROGRESS
-            order.save(update_fields=["status", "updated_at"])
-    elif new_status == "delivered_to_station":
-        order.status = CargoOrder.Status.AT_ORIGIN_STATION
-        order.save(update_fields=["status", "updated_at"])
-    elif new_status == "cancelled":
-        order.status = CargoOrder.Status.CANCELLED
+    not_picked_up = (CargoOrder.Status.PENDING, CargoOrder.Status.SUBMITTED)
+    before_station = not_picked_up + (CargoOrder.Status.PICKUP_IN_PROGRESS,)
+    order_status = None
+    if new_status == "picked_up" and order.status in not_picked_up:
+        order_status = CargoOrder.Status.PICKUP_IN_PROGRESS
+    elif new_status == "delivered_to_station" and order.status in before_station:
+        order_status = CargoOrder.Status.AT_ORIGIN_STATION
+    elif new_status == "cancelled" and order.status in before_station:
+        order_status = CargoOrder.Status.CANCELLED
+    if order_status:
+        order.status = order_status
         order.save(update_fields=["status", "updated_at"])
 
     serializer = CargoTripSerializer(trip, context={"request": request})

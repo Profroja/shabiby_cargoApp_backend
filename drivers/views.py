@@ -7,7 +7,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Driver
-from .serializers import DriverProfileSerializer, DriverRegistrationSerializer
+from .serializers import DriverMeSerializer, DriverProfileSerializer, DriverRegistrationSerializer
 
 User = get_user_model()
 
@@ -86,7 +86,7 @@ class DriverRegisterView(generics.CreateAPIView):
 
 
 class DriverMeView(generics.RetrieveUpdateAPIView):
-    serializer_class = DriverProfileSerializer
+    serializer_class = DriverMeSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 

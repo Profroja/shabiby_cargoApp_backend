@@ -55,6 +55,10 @@ class CargoTrip(models.Model):
     arrived_at_station_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    # Split of fare_amount, saved when the trip is delivered so later commission
+    # changes don't rewrite history. driver_earning + company_share = fare_amount.
+    driver_earning = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    company_share = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -107,6 +107,8 @@ def station_record(station):
         "is_active": station.is_active,
         "latitude": float(station.latitude) if station.latitude is not None else None,
         "longitude": float(station.longitude) if station.longitude is not None else None,
+        "price_per_km": float(station.price_per_km) if station.price_per_km is not None else None,
+        "min_fare": float(station.min_fare) if station.min_fare is not None else None,
         "created_at": station.created_at.isoformat() if station.created_at else None,
         "updated_at": station.updated_at.isoformat() if station.updated_at else None,
     }
@@ -178,6 +180,8 @@ class CargoCenterListView(generics.GenericAPIView):
                 "is_active": item.get("is_active", True),
                 "latitude": item.get("latitude"),
                 "longitude": item.get("longitude"),
+                "price_per_km": item.get("price_per_km"),
+                "min_fare": item.get("min_fare"),
                 "created_at": item.get("created_at"),
                 "updated_at": item.get("updated_at"),
             })
@@ -204,6 +208,8 @@ class CargoCenterDetailView(generics.GenericAPIView):
                     "is_active": item.get("is_active", True),
                     "latitude": item.get("latitude"),
                     "longitude": item.get("longitude"),
+                    "price_per_km": item.get("price_per_km"),
+                    "min_fare": item.get("min_fare"),
                     "created_at": item.get("created_at"),
                     "updated_at": item.get("updated_at"),
                 })

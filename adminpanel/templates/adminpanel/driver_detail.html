@@ -1,160 +1,619 @@
 {% extends "adminpanel/base.html" %}
-{% block title %}Driver Detail{% endblock %}
+{% load panel_extras %}
+{% block title %}{{ driver.user.first_name }} {{ driver.user.last_name }}{% endblock %}
 {% block content %}
 <a href="{% url 'adminpanel:drivers' %}" class="text-decoration-none mb-3 d-inline-block">
     <i class="bi bi-arrow-left"></i> Back to Drivers
 </a>
-<div class="row g-4">
-    <div class="col-md-4">
-        <div class="card stat-card">
-            <div class="card-body text-center">
-                {% if driver.profile_photo %}
-                <img src="{{ driver.profile_photo.url }}" class="img-fluid rounded mb-3" style="max-width: 100%; max-height: 400px; object-fit: contain; cursor: pointer;" alt="Profile Photo" onclick="window.open('{{ driver.profile_photo.url }}', '_blank')">
-                {% else %}
-                <div class="rounded bg-secondary mx-auto mb-3 d-flex align-items-center justify-content-center text-white" style="width: 120px; height: 120px; font-size: 2rem;">
-                    {{ driver.user.first_name|slice:":1" }}
-                </div>
-                {% endif %}
-                <h4 class="mb-1">{{ driver.user.first_name }} {{ driver.user.middle_name }} {{ driver.user.last_name }}</h4>
-                <p class="text-muted mb-2">{{ driver.user.phone_number }}</p>
-                {% if driver.approval_status == 'pending' %}
-                <span class="badge badge-pending fs-6">Pending Approval</span>
-                {% elif driver.approval_status == 'approved' %}
-                <span class="badge badge-approved fs-6">Approved</span>
-                {% elif driver.approval_status == 'rejected' %}
-                <span class="badge badge-rejected fs-6">Rejected</span>
-                {% endif %}
-            </div>
-        </div>
-        {% if driver.license_photo %}
-        <div class="card stat-card mt-3">
-            <div class="card-body">
-                <h6 class="text-muted mb-2">License ID Card Photo</h6>
-                <img src="{{ driver.license_photo.url }}" class="img-fluid rounded" style="cursor: pointer;" alt="License" onclick="window.open('{{ driver.license_photo.url }}', '_blank')">
-            </div>
+
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+    <div class="d-flex align-items-center gap-3">
+        {% if driver.profile_photo %}
+        <img src="{{ driver.profile_photo.url }}" alt="" style="width: 72px; height: 72px; border-radius: 50%; object-fit: cover;">
+        {% else %}
+        <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white fs-3" style="width: 72px; height: 72px;">
+            {{ driver.user.first_name|slice:":1" }}
         </div>
         {% endif %}
+        <div>
+            <h3 class="mb-1">{{ driver.user.first_name }} {{ driver.user.middle_name }} {{ driver.user.last_name }}</h3>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                {% if driver.approval_status == 'pending' %}<span class="badge badge-pending">Pending approval</span>
+                {% elif driver.approval_status == 'approved' %}<span class="badge badge-approved">Approved</span>
+                {% else %}<span class="badge badge-rejected">Rejected</span>{% endif %}
+                {% include "adminpanel/_level_badge.html" with level=account.level %}
+                {% include "adminpanel/_sub_badge.html" with a=account %}
+                <span class="text-muted small"><i class="bi bi-star-fill text-warning"></i> {{ driver.rating_avg }} ({{ driver.rating_count }} rating{{ driver.rating_count|pluralize }})</span>
+                <span class="text-muted small"><i class="bi bi-telephone"></i> {{ driver.user.phone_number|default:"—" }}</span>
+            </div>
+        </div>
     </div>
-    <div class="col-md-8">
-        <div class="card stat-card mb-3">
-            <div class="card-body">
-                <h5 class="mb-3"><i class="bi bi-info-circle"></i> Driver Information</h5>
-                <table class="table table-borderless mb-0">
-                    <tr>
-                        <td class="text-muted" style="width: 180px;">First Name</td>
-                        <td>{{ driver.user.first_name }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Middle Name</td>
-                        <td>{{ driver.user.middle_name|default:"—" }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Last Name</td>
-                        <td>{{ driver.user.last_name }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Phone Number</td>
-                        <td>{{ driver.user.phone_number }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">License Number</td>
-                        <td>{{ driver.license_number }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">National ID</td>
-                        <td>{{ driver.national_id_number|default:"—" }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Registered</td>
-                        <td>{{ driver.created_at|date:"M d, Y H:i" }}</td>
-                    </tr>
+    <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-primary" onclick="openPaymentModal(DRIVER)"><i class="bi bi-cash-coin"></i> Record Payment</button>
+        <button class="btn btn-outline-primary" onclick="openSubscriptionModal()"><i class="bi bi-calendar-plus"></i> Set Subscription</button>
+        <button class="btn btn-outline-primary" onclick="openFeedbackModal()"><i class="bi bi-chat-square-text"></i> Add Feedback</button>
+    </div>
+</div>
+
+{% if account.subscription_status == 'expired' %}
+<div class="alert alert-danger d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-octagon fs-5"></i>
+    <div>The subscription has expired, so this driver <strong>cannot accept new trips</strong>. Add a new subscription period to let them work again.</div>
+</div>
+{% elif account.subscription_days_left is not None and account.subscription_days_left <= 5 %}
+<div class="alert alert-warning">
+    <i class="bi bi-hourglass-split"></i> The current subscription ends in <strong>{{ account.subscription_days_left }} day{{ account.subscription_days_left|pluralize }}</strong> ({{ account.subscription.ends_on|date:"M d, Y" }}).
+</div>
+{% endif %}
+
+<!-- Money summary -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-2">
+        <div class="card stat-card h-100"><div class="card-body">
+            <div class="text-muted small">Completed trips</div>
+            <div class="fs-4 fw-bold">{{ account.completed_trips }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card stat-card h-100"><div class="card-body">
+            <div class="text-muted small">Fares collected</div>
+            <div class="fs-5 fw-bold">{{ account.fares_total|tzs }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card stat-card h-100"><div class="card-body">
+            <div class="text-muted small">Driver earned</div>
+            <div class="fs-5 fw-bold text-success">{{ account.earnings_total|tzs }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card stat-card h-100"><div class="card-body">
+            <div class="text-muted small">Company share</div>
+            <div class="fs-5 fw-bold">{{ account.company_total|tzs }}</div>
+            {% if account.subscription_fees %}<div class="small text-muted">+ {{ account.subscription_fees|tzs }} subscription</div>{% endif %}
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card stat-card h-100"><div class="card-body">
+            <div class="text-muted small">Paid to company</div>
+            <div class="fs-5 fw-bold">{{ account.paid_total|tzs }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card stat-card h-100 {% if account.balance_due > 0 %}border border-danger{% endif %}"><div class="card-body">
+            <div class="text-muted small">Balance owed</div>
+            {% if account.balance_due > 0 %}
+            <div class="fs-5 fw-bold text-danger">{{ account.balance_due|tzs }}</div>
+            {% elif account.balance_due < 0 %}
+            <div class="fs-5 fw-bold text-success">Credit {{ account.balance_due|absval|tzs }}</div>
+            {% else %}
+            <div class="fs-5 fw-bold text-success">Paid up</div>
+            {% endif %}
+        </div></div>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#trips" type="button" role="tab">Trips <span class="badge bg-secondary">{{ trips|length }}</span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#payments" type="button" role="tab">Payments <span class="badge bg-secondary">{{ payments|length }}</span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#subscription" type="button" role="tab">Subscription</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#feedback" type="button" role="tab">Feedback &amp; Level <span class="badge bg-secondary">{{ ratings|length }}</span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab">Profile</button></li>
+</ul>
+
+<div class="tab-content">
+    <!-- Trips -->
+    <div class="tab-pane fade show active" id="trips" role="tabpanel">
+        <div class="card stat-card">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Customer</th>
+                            <th>Pickup → Station</th>
+                            <th class="text-end">Km</th>
+                            <th class="text-end">Fare collected</th>
+                            <th class="text-end">Driver earned</th>
+                            <th class="text-end">Company share</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for trip in trips %}
+                        <tr>
+                            <td class="text-nowrap">{{ trip.created_at|date:"M d, Y" }}<div class="small text-muted">{{ trip.created_at|date:"H:i" }}</div></td>
+                            <td>{{ trip.order.customer.first_name }} {{ trip.order.customer.last_name }}</td>
+                            <td>
+                                <div class="small">{{ trip.pickup_address_text|default:"—"|truncatechars:40 }}</div>
+                                <div class="small text-muted"><i class="bi bi-arrow-return-right"></i> {{ trip.station_name|default:"—" }}</div>
+                            </td>
+                            <td class="text-end">{{ trip.distance_km|default:"—" }}</td>
+                            <td class="text-end">{{ trip.fare_amount|tzs }}</td>
+                            {% if trip.status == 'delivered_to_station' %}
+                            <td class="text-end text-success">{{ trip.split_driver|tzs }}</td>
+                            <td class="text-end fw-semibold">{{ trip.split_company|tzs }}</td>
+                            <td><span class="badge bg-success">Delivered</span></td>
+                            {% else %}
+                            <td class="text-end text-muted">—</td>
+                            <td class="text-end text-muted">—</td>
+                            <td>
+                                {% if trip.status == 'cancelled' %}<span class="badge bg-danger">Cancelled</span>
+                                {% else %}<span class="badge bg-info text-dark">In progress</span>{% endif %}
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="8" class="text-center text-muted py-4">No trips yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
                 </table>
             </div>
         </div>
-        <div class="card stat-card mb-3">
-            <div class="card-body">
-                <h5 class="mb-3"><i class="bi bi-truck"></i> Vehicle Information</h5>
-                <table class="table table-borderless mb-0">
-                    <tr>
-                        <td class="text-muted" style="width: 180px;">Vehicle Type</td>
-                        <td>{{ driver.vehicle_type.display_name|default:"—" }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Vehicle Name</td>
-                        <td>{{ driver.vehicle_name|default:"—" }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Vehicle Color</td>
-                        <td>{{ driver.vehicle_color|default:"—" }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">License Plate</td>
-                        <td><strong>{{ driver.license_plate }}</strong></td>
-                    </tr>
-                </table>
+        <p class="text-muted small mt-2">
+            Only delivered trips count toward the balance. The split is saved when the trip is delivered, using the commission band for its distance.
+        </p>
+    </div>
+
+    <!-- Payments -->
+    <div class="tab-pane fade" id="payments" role="tabpanel">
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <div class="card stat-card"><div class="card-body">
+                    <div class="d-flex justify-content-between"><span class="text-muted">Trip commission owed</span><strong>{{ account.company_total|tzs }}</strong></div>
+                    <div class="d-flex justify-content-between"><span class="text-muted">Paid</span><strong class="text-success">− {{ account.commission_paid|tzs }}</strong></div>
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between"><span>Balance</span><strong class="{% if account.commission_due > 0 %}text-danger{% endif %}">{{ account.commission_due|tzs }}</strong></div>
+                </div></div>
+            </div>
+            <div class="col-md-6">
+                <div class="card stat-card"><div class="card-body">
+                    <div class="d-flex justify-content-between"><span class="text-muted">Subscription fees</span><strong>{{ account.subscription_fees|tzs }}</strong></div>
+                    <div class="d-flex justify-content-between"><span class="text-muted">Paid</span><strong class="text-success">− {{ account.subscription_paid|tzs }}</strong></div>
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between"><span>Balance</span><strong class="{% if account.subscription_due > 0 %}text-danger{% endif %}">{{ account.subscription_due|tzs }}</strong></div>
+                </div></div>
             </div>
         </div>
         <div class="card stat-card">
-            <div class="card-body">
-                <h5 class="mb-3"><i class="bi bi-check-circle"></i> Approval Actions</h5>
-                {% if driver.approval_status == 'pending' %}
-                <div class="d-flex gap-2 flex-wrap">
-                    <button class="btn btn-success" onclick="approveDriver('approved')">
-                        <i class="bi bi-check-lg"></i> Approve Driver
-                    </button>
-                    <button class="btn btn-danger" onclick="approveDriver('rejected')">
-                        <i class="bi bi-x-lg"></i> Reject Driver
-                    </button>
-                    <button class="btn btn-outline-danger" onclick="deleteDriver()">
-                        <i class="bi bi-trash"></i> Delete
-                    </button>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead>
+                        <tr><th>Date</th><th>For</th><th class="text-end">Amount</th><th>Method</th><th>Reference</th><th>Note</th><th>Recorded by</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        {% for p in payments %}
+                        <tr>
+                            <td class="text-nowrap">{{ p.paid_on|date:"M d, Y" }}</td>
+                            <td>{{ p.get_kind_display }}</td>
+                            <td class="text-end fw-semibold">{{ p.amount|tzs }}</td>
+                            <td>{{ p.get_method_display }}</td>
+                            <td>{{ p.reference|default:"—" }}</td>
+                            <td class="small">{{ p.note|default:"—" }}</td>
+                            <td class="small text-muted">{{ p.recorded_by.first_name|default:p.recorded_by.username|default:"—" }}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-danger py-0" title="Delete payment" onclick="deleteRecord('{% url 'adminpanel:driver-payment-delete' p.pk %}', 'Delete this payment of {{ p.amount|tzs }}?')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="8" class="text-center text-muted py-4">No payments recorded yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Subscription -->
+    <div class="tab-pane fade" id="subscription" role="tabpanel">
+        <div class="card stat-card mb-3">
+            <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <div class="text-muted small">Current status</div>
+                    <div class="fs-5">{% include "adminpanel/_sub_badge.html" with a=account %}</div>
+                    <div class="small text-muted mt-1">
+                        {% if account.subscription_status == 'none' %}
+                        No subscription has been set. The driver can work until you add one.
+                        {% elif account.subscription_status == 'expired' %}
+                        No period covers today, so the driver can't accept trips.
+                        {% elif account.subscription.ends_on %}
+                        Started {{ account.subscription.starts_on|date:"M d, Y" }} · {{ account.subscription_days_left }} day{{ account.subscription_days_left|pluralize }} left.
+                        {% else %}
+                        Started {{ account.subscription.starts_on|date:"M d, Y" }} · no end date.
+                        {% endif %}
+                    </div>
                 </div>
-                {% elif driver.approval_status == 'approved' %}
-                <div class="alert alert-success mb-0">
-                    <i class="bi bi-check-circle"></i> This driver has been approved.
+                <button class="btn btn-primary" onclick="openSubscriptionModal()"><i class="bi bi-calendar-plus"></i> Set Subscription</button>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead><tr><th>Plan</th><th>Starts</th><th>Ends</th><th class="text-end">Fee</th><th>Note</th><th>Added by</th><th></th></tr></thead>
+                    <tbody>
+                        {% for s in subscriptions %}
+                        <tr {% if s.starts_on <= today and s.ends_on and s.ends_on < today %}class="text-muted"{% endif %}>
+                            <td>{% if s.plan == 'paid' %}<span class="badge bg-primary">Paid</span>{% else %}<span class="badge bg-success">Free</span>{% endif %}</td>
+                            <td>{{ s.starts_on|date:"M d, Y" }}</td>
+                            <td>{{ s.ends_on|date:"M d, Y"|default:"No end" }}</td>
+                            <td class="text-end">{% if s.plan == 'paid' %}{{ s.fee|tzs }}{% else %}—{% endif %}</td>
+                            <td class="small">{{ s.note|default:"—" }}</td>
+                            <td class="small text-muted">{{ s.created_by.first_name|default:s.created_by.username|default:"—" }}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-danger py-0" title="Delete period" onclick="deleteRecord('{% url 'adminpanel:driver-subscription-delete' s.pk %}', 'Delete this subscription period?')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="7" class="text-center text-muted py-4">No subscription periods yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <p class="text-muted small mt-2">
+            Usually a driver starts with a <strong>Free</strong> period, then moves to <strong>Paid</strong> periods. Paid fees are added to what the driver owes once the period starts.
+        </p>
+    </div>
+
+    <!-- Feedback & level -->
+    <div class="tab-pane fade" id="feedback" role="tabpanel">
+        <div class="row g-3">
+            <div class="col-lg-4">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h6 class="mb-3">Driver level</h6>
+                        <div class="fs-4 mb-1">{% include "adminpanel/_level_badge.html" with level=account.level %}</div>
+                        <div class="small text-muted mb-3">
+                            {{ account.completed_trips }} trips · <i class="bi bi-star-fill text-warning"></i> {{ driver.rating_avg }} · {{ account.open_issues }} open issue{{ account.open_issues|pluralize }}
+                        </div>
+                        {% if account.level.next %}
+                        <div class="small">To reach <strong>{{ account.level.next.name }}</strong>:</div>
+                        <ul class="small mb-3">
+                            {% for need in account.level.needs %}<li>{{ need }}</li>{% endfor %}
+                        </ul>
+                        {% else %}
+                        <div class="small text-success mb-3"><i class="bi bi-trophy"></i> Highest level reached.</div>
+                        {% endif %}
+                        <table class="table table-sm small mb-0">
+                            <thead><tr><th>Level</th><th class="text-end">Trips</th><th class="text-end">Rating</th><th class="text-end">Open issues</th></tr></thead>
+                            <tbody>
+                                {% for tier in levels %}
+                                <tr {% if tier.level == account.level.level %}class="table-active fw-semibold"{% endif %}>
+                                    <td><span class="d-inline-block rounded-circle me-1" style="width: 9px; height: 9px; background: {{ tier.color }};"></span>{{ tier.name }}</td>
+                                    <td class="text-end">{{ tier.min_trips }}+</td>
+                                    <td class="text-end">{% if tier.min_rating %}{{ tier.min_rating }}+{% else %}—{% endif %}</td>
+                                    <td class="text-end">{% if tier.max_open_issues is None %}any{% else %}≤ {{ tier.max_open_issues }}{% endif %}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="d-flex gap-2 mt-2">
-                    <button class="btn btn-outline-danger" onclick="approveDriver('rejected')">
-                        <i class="bi bi-x-lg"></i> Revoke Approval
-                    </button>
-                    <button class="btn btn-outline-danger" onclick="deleteDriver()">
-                        <i class="bi bi-trash"></i> Delete
-                    </button>
+            </div>
+            <div class="col-lg-8">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Ratings &amp; feedback</h6>
+                            <button class="btn btn-sm btn-outline-primary" onclick="openFeedbackModal()"><i class="bi bi-plus"></i> Add Feedback</button>
+                        </div>
+                        {% for r in ratings %}
+                        <div class="d-flex gap-3 py-2 {% if not forloop.last %}border-bottom{% endif %}">
+                            <div style="width: 84px;" class="flex-shrink-0">
+                                {% if r.category == 'good' %}<span class="badge bg-success">Good</span>
+                                {% elif r.category == 'bad' %}<span class="badge bg-warning text-dark">Bad</span>
+                                {% elif r.category == 'issue' %}<span class="badge bg-danger">Issue</span>
+                                {% else %}<span class="badge bg-secondary">Neutral</span>{% endif %}
+                                {% if r.stars %}<div class="small text-warning mt-1">{% for i in "12345" %}{% if forloop.counter <= r.stars %}<i class="bi bi-star-fill"></i>{% else %}<i class="bi bi-star"></i>{% endif %}{% endfor %}</div>{% endif %}
+                            </div>
+                            <div class="flex-grow-1">
+                                <div>{{ r.comment|default:"(no comment)" }}</div>
+                                <div class="small text-muted">{{ r.source }} · {{ r.who }} · {{ r.created_at|date:"M d, Y" }}
+                                    {% if r.feedback.category == 'issue' %}
+                                    · {% if r.feedback.is_resolved %}<span class="text-success">Resolved</span>{% else %}<span class="text-danger">Open</span>{% endif %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% if r.feedback %}
+                            <div class="text-nowrap">
+                                {% if r.feedback.category == 'issue' %}
+                                <button class="btn btn-sm {% if r.feedback.is_resolved %}btn-outline-secondary{% else %}btn-outline-success{% endif %} py-0"
+                                        onclick="resolveIssue('{% url 'adminpanel:driver-feedback-resolve' r.feedback.pk %}', {{ r.feedback.is_resolved|yesno:'true,false' }})">
+                                    {% if r.feedback.is_resolved %}Reopen{% else %}Resolve{% endif %}
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-sm btn-outline-danger py-0" title="Delete" onclick="deleteRecord('{% url 'adminpanel:driver-feedback-delete' r.feedback.pk %}', 'Delete this feedback?')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% empty %}
+                        <p class="text-muted mb-0">No ratings or feedback yet. Customers rate drivers in the app after delivery.</p>
+                        {% endfor %}
+                    </div>
                 </div>
-                {% elif driver.approval_status == 'rejected' %}
-                <div class="alert alert-danger mb-0">
-                    <i class="bi bi-x-circle"></i> This driver has been rejected.
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile -->
+    <div class="tab-pane fade" id="profile" role="tabpanel">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card stat-card mb-3">
+                    <div class="card-body">
+                        <h6 class="mb-3"><i class="bi bi-person"></i> Driver</h6>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tr><td class="text-muted" style="width: 150px;">Phone</td><td>{{ driver.user.phone_number|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">License number</td><td>{{ driver.license_number|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">National ID</td><td>{{ driver.national_id_number|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">Region</td><td>{{ driver.region|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">Registered</td><td>{{ driver.created_at|date:"M d, Y H:i" }}</td></tr>
+                        </table>
+                    </div>
                 </div>
-                <div class="d-flex gap-2 mt-2">
-                    <button class="btn btn-outline-success" onclick="approveDriver('approved')">
-                        <i class="bi bi-check-lg"></i> Approve Anyway
-                    </button>
-                    <button class="btn btn-outline-danger" onclick="deleteDriver()">
-                        <i class="bi bi-trash"></i> Delete
-                    </button>
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h6 class="mb-3"><i class="bi bi-truck"></i> Vehicle</h6>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tr><td class="text-muted" style="width: 150px;">Type</td><td>{{ driver.vehicle_type.display_name|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">Name</td><td>{{ driver.vehicle_name|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">Color</td><td>{{ driver.vehicle_color|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">License plate</td><td><strong>{{ driver.license_plate|default:"—" }}</strong></td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                {% if driver.license_photo %}
+                <div class="card stat-card mb-3">
+                    <div class="card-body">
+                        <h6 class="mb-2"><i class="bi bi-person-vcard"></i> License / ID photo</h6>
+                        <img src="{{ driver.license_photo.url }}" class="img-fluid rounded" style="cursor: pointer;" alt="License" onclick="window.open('{{ driver.license_photo.url }}', '_blank')">
+                    </div>
                 </div>
                 {% endif %}
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h6 class="mb-3"><i class="bi bi-check-circle"></i> Approval</h6>
+                        <div class="d-flex gap-2 flex-wrap">
+                            {% if driver.approval_status != 'approved' %}
+                            <button class="btn btn-success" onclick="approveDriver('approved')"><i class="bi bi-check-lg"></i> Approve</button>
+                            {% endif %}
+                            {% if driver.approval_status != 'rejected' %}
+                            <button class="btn btn-outline-danger" onclick="approveDriver('rejected')"><i class="bi bi-x-lg"></i> {% if driver.approval_status == 'approved' %}Revoke approval{% else %}Reject{% endif %}</button>
+                            {% endif %}
+                            <button class="btn btn-outline-danger" onclick="deleteDriver()"><i class="bi bi-trash"></i> Delete driver</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Set subscription -->
+<div class="modal fade" id="subscriptionModal" tabindex="-1" aria-labelledby="subscriptionModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="subscriptionForm" onsubmit="submitSubscription(event)">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="subscriptionModalTitle"><i class="bi bi-calendar-plus"></i> Set Subscription</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body row g-3">
+                    <div class="col-12">
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="plan" id="planFree" value="free" checked onchange="syncPlan()">
+                            <label class="btn btn-outline-success" for="planFree"><i class="bi bi-gift"></i> Free</label>
+                            <input type="radio" class="btn-check" name="plan" id="planPaid" value="paid" onchange="syncPlan()">
+                            <label class="btn btn-outline-primary" for="planPaid"><i class="bi bi-patch-check"></i> Paid</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Starts on</label>
+                        <input type="date" name="starts_on" class="form-control" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Ends on <span class="text-muted small" id="endsHint">(optional)</span></label>
+                        <input type="date" name="ends_on" class="form-control">
+                    </div>
+                    <div class="col-12">
+                        <div class="d-flex gap-2 flex-wrap">
+                            <span class="small text-muted align-self-center">Length:</span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setLength(7)">1 week</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setLength(30)">30 days</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setLength(90)">3 months</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setLength(365)">1 year</button>
+                        </div>
+                    </div>
+                    <div class="col-md-6 d-none" id="feeField">
+                        <label class="form-label">Fee (TSh)</label>
+                        <input name="fee" class="form-control" inputmode="decimal" placeholder="e.g. 20000">
+                        <div class="form-text">Added to what the driver owes.</div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Note <span class="text-muted small">(optional)</span></label>
+                        <input name="note" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add feedback -->
+<div class="modal fade" id="feedbackModal" tabindex="-1" aria-labelledby="feedbackModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="feedbackForm" onsubmit="submitFeedback(event)">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="feedbackModalTitle"><i class="bi bi-chat-square-text"></i> Add Feedback</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body row g-3">
+                    <div class="col-12">
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="category" id="catGood" value="good" checked>
+                            <label class="btn btn-outline-success" for="catGood"><i class="bi bi-hand-thumbs-up"></i> Good</label>
+                            <input type="radio" class="btn-check" name="category" id="catBad" value="bad">
+                            <label class="btn btn-outline-warning" for="catBad"><i class="bi bi-hand-thumbs-down"></i> Bad</label>
+                            <input type="radio" class="btn-check" name="category" id="catIssue" value="issue">
+                            <label class="btn btn-outline-danger" for="catIssue"><i class="bi bi-exclamation-triangle"></i> Issue</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Stars <span class="text-muted small">(optional; counts toward the rating)</span></label>
+                        <div class="d-flex gap-1 fs-3" id="starPicker">
+                            {% for i in "12345" %}<i class="bi bi-star text-warning" role="button" data-value="{{ forloop.counter }}" onclick="pickStars({{ forloop.counter }})"></i>{% endfor %}
+                            <button type="button" class="btn btn-link btn-sm align-self-center" onclick="pickStars(0)">Clear</button>
+                        </div>
+                        <input type="hidden" name="stars">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Trip <span class="text-muted small">(optional)</span></label>
+                        <select name="trip" class="form-select">
+                            <option value="">Not about a specific trip</option>
+                            {% for trip in trips %}
+                            <option value="{{ trip.pk }}">{{ trip.created_at|date:"M d" }} · {{ trip.order.customer.first_name }} · {{ trip.pickup_address_text|truncatechars:30 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Comment</label>
+                        <textarea name="comment" class="form-control" rows="3" required placeholder="What happened?"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Feedback</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% include "adminpanel/_payment_modal.html" %}
 {% endblock %}
+
 {% block scripts %}
 <script>
+const DRIVER = {
+    id: '{{ driver.id }}',
+    name: '{{ driver.user.first_name|escapejs }} {{ driver.user.last_name|escapejs }}',
+    commissionDue: {{ account.commission_due|stringformat:"f" }},
+    subscriptionDue: {{ account.subscription_due|stringformat:"f" }},
+};
+
+// Keep the open tab across reloads (#payments, #subscription, ...).
+document.querySelectorAll('[data-bs-toggle="tab"]').forEach((btn) => {
+    btn.addEventListener('shown.bs.tab', () => history.replaceState(null, '', btn.dataset.bsTarget));
+});
+if (location.hash) {
+    const btn = document.querySelector(`[data-bs-target="${location.hash}"]`);
+    if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
+}
+
+function formFields(form) {
+    return Object.fromEntries(new FormData(form));
+}
+
+async function postAndReload(url, fields, message, modalId) {
+    try {
+        await panelPost(url, fields);
+        if (modalId) bootstrap.Modal.getInstance(modalId)?.hide();
+        await swalSuccess(message);
+        location.reload();
+    } catch (err) {
+        swalError(err.message);
+    }
+}
+
+// --- Subscription ---
+function addDays(isoDate, days) {
+    const d = new Date(isoDate + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function syncPlan() {
+    const paid = document.getElementById('planPaid').checked;
+    document.getElementById('feeField').classList.toggle('d-none', !paid);
+    const form = document.getElementById('subscriptionForm');
+    form.fee.required = paid;
+    form.ends_on.required = paid;
+    document.getElementById('endsHint').textContent = paid ? '(required)' : '(optional; empty = no end)';
+}
+
+function setLength(days) {
+    const form = document.getElementById('subscriptionForm');
+    if (!form.starts_on.value) form.starts_on.value = localToday();
+    form.ends_on.value = addDays(form.starts_on.value, days - 1);
+}
+
+function openSubscriptionModal() {
+    const form = document.getElementById('subscriptionForm');
+    form.reset();
+    form.starts_on.value = localToday();
+    syncPlan();
+    bootstrap.Modal.getOrCreateInstance('#subscriptionModal').show();
+}
+
+function submitSubscription(event) {
+    event.preventDefault();
+    postAndReload("{% url 'adminpanel:driver-subscription-add' driver.id %}", formFields(event.target), 'Subscription saved.', '#subscriptionModal');
+}
+
+// --- Feedback ---
+function pickStars(n) {
+    document.querySelector('#feedbackForm [name=stars]').value = n || '';
+    document.querySelectorAll('#starPicker [data-value]').forEach((star) => {
+        star.className = `bi ${Number(star.dataset.value) <= n ? 'bi-star-fill' : 'bi-star'} text-warning`;
+    });
+}
+
+function openFeedbackModal() {
+    document.getElementById('feedbackForm').reset();
+    pickStars(0);
+    bootstrap.Modal.getOrCreateInstance('#feedbackModal').show();
+}
+
+function submitFeedback(event) {
+    event.preventDefault();
+    postAndReload("{% url 'adminpanel:driver-feedback-add' driver.id %}", formFields(event.target), 'Feedback saved.', '#feedbackModal');
+}
+
+async function resolveIssue(url, isResolved) {
+    const ok = await swalConfirm(
+        isResolved ? 'The issue will count against the driver level again.' : 'Resolved issues no longer hold the driver level back.',
+        { title: isResolved ? 'Reopen this issue?' : 'Mark issue as resolved?', confirmText: isResolved ? 'Reopen' : 'Resolve' },
+    );
+    if (ok) postAndReload(url, null, isResolved ? 'Issue reopened.' : 'Issue resolved.');
+}
+
+async function deleteRecord(url, question) {
+    const ok = await swalConfirm('This cannot be undone.', { title: question, confirmText: 'Delete', danger: true });
+    if (ok) postAndReload(url, null, 'Deleted.');
+}
+
+// --- Approval ---
 async function approveDriver(status) {
     const approve = status === 'approved';
     const ok = await swalConfirm(
         approve ? 'The driver will be able to receive and accept trips.' : 'The driver will not be able to take trips.',
         { title: approve ? 'Approve this driver?' : 'Reject this driver?', confirmText: approve ? 'Approve' : 'Reject', danger: !approve },
     );
-    if (!ok) return;
-    try {
-        await panelPost("{% url 'adminpanel:driver-approve' driver.id %}", { approval_status: status });
-        await swalSuccess(approve ? 'Driver approved.' : 'Driver rejected.');
-        location.reload();
-    } catch (err) {
-        swalError(err.message);
-    }
+    if (ok) postAndReload("{% url 'adminpanel:driver-approve' driver.id %}", { approval_status: status }, approve ? 'Driver approved.' : 'Driver rejected.');
 }
 
 async function deleteDriver() {

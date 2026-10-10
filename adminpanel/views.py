@@ -1,13 +1,17 @@
+from decimal import Decimal
+
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.shortcuts import redirect, render, get_object_or_404
 from django.db.models import Q
 from django.http import JsonResponse
 from django.urls import reverse
+from django.utils import timezone
 
 from auths.models import User
 from commissions.models import DriverCommissionBand, get_driver_commission
-from drivers.models import Driver
+from drivers.models import Driver, DriverFeedback, DriverPayment, DriverSubscription
+from drivers.performance import LEVELS, accounts_for, driver_account, trip_split
 from farezones.models import FareZone
 from orders.models import CargoOrder
 from stations.models import CargoStation
@@ -136,14 +140,62 @@ def driver_list(request):
     drivers = Driver.objects.select_related("user", "vehicle_type").order_by("-created_at")
     if status_filter:
         drivers = drivers.filter(approval_status=status_filter)
+    drivers = list(drivers)
+    accounts = accounts_for(drivers)
+    for driver in drivers:
+        driver.account = accounts[driver.id]
     return render(request, "adminpanel/drivers.html", {"drivers": drivers, "status_filter": status_filter})
 
 
 @login_required
 @user_passes_test(is_admin)
 def driver_detail(request, pk):
-    driver = get_object_or_404(Driver, pk=pk)
-    return render(request, "adminpanel/driver_detail.html", {"driver": driver})
+    driver = get_object_or_404(Driver.objects.select_related("user", "vehicle_type"), pk=pk)
+    trips = list(
+        driver.trips.select_related("order", "order__customer").order_by("-created_at")
+    )
+    station_map = _get_station_name_map()
+    for trip in trips:
+        trip.station_name = station_map.get(str(trip.destination_station), trip.destination_station)
+        if trip.status == "delivered_to_station":
+            _fare, trip.split_driver, trip.split_company = trip_split(trip)
+
+    ratings = [
+        {
+            "source": "Customer",
+            "category": "good" if r.stars >= 4 else "bad" if r.stars <= 2 else "neutral",
+            "stars": r.stars,
+            "comment": r.comment,
+            "who": r.customer.first_name or r.customer.username,
+            "created_at": r.created_at,
+            "feedback": None,
+        }
+        for r in driver.ratings.select_related("customer")
+    ]
+    ratings += [
+        {
+            "source": "Admin",
+            "category": f.category,
+            "stars": f.stars,
+            "comment": f.comment,
+            "who": (f.recorded_by.first_name or f.recorded_by.username) if f.recorded_by else "Admin",
+            "created_at": f.created_at,
+            "feedback": f,
+        }
+        for f in driver.feedback.select_related("recorded_by")
+    ]
+    ratings.sort(key=lambda r: r["created_at"], reverse=True)
+
+    return render(request, "adminpanel/driver_detail.html", {
+        "driver": driver,
+        "account": driver_account(driver),
+        "trips": trips,
+        "payments": driver.payments.select_related("recorded_by"),
+        "subscriptions": driver.subscriptions.select_related("created_by"),
+        "ratings": ratings,
+        "levels": LEVELS,
+        "today": timezone.localdate(),
+    })
 
 
 @login_required
@@ -377,6 +429,20 @@ def _parse_station_form(post):
     if (coords["latitude"] is None) != (coords["longitude"] is None):
         raise ValueError("Enter both latitude and longitude, or leave both empty.")
 
+    prices = {}
+    for field, label in (("price_per_km", "Price per km"), ("min_fare", "Minimum fare")):
+        raw = post.get(field, "").strip().replace(",", "")
+        if not raw:
+            prices[field] = None
+            continue
+        try:
+            value = Decimal(raw).quantize(Decimal("0.01"))
+        except InvalidOperation:
+            raise ValueError(f"{label} must be a number.")
+        if value < 0:
+            raise ValueError(f"{label} can't be negative.")
+        prices[field] = value
+
     zone_id = post.get("zone", "").strip()
     return {
         "name": name,
@@ -386,6 +452,8 @@ def _parse_station_form(post):
         "address": post.get("address", "").strip(),
         "latitude": coords["latitude"],
         "longitude": coords["longitude"],
+        "price_per_km": prices["price_per_km"],
+        "min_fare": prices["min_fare"],
         "zone_id": int(zone_id) if zone_id.isdigit() else None,
         "is_active": post.get("is_active") == "on",
     }
@@ -630,4 +698,176 @@ def staff_delete(request, pk):
     if member.pk == request.user.pk:
         return JsonResponse({"error": "You can't delete your own account."}, status=400)
     member.delete()
+    return JsonResponse({"ok": True})
+
+
+# ---------- Driver accounts: payments, subscriptions, feedback ----------
+
+def _money(raw, label, allow_zero=False):
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        value = Decimal(str(raw).replace(",", "").strip()).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"{label} must be a number.")
+    if value < 0 or (value == 0 and not allow_zero):
+        raise ValueError(f"{label} must be greater than zero.")
+    return value
+
+
+def _date(raw, label, required=True):
+    from datetime import date
+
+    raw = (raw or "").strip()
+    if not raw:
+        if required:
+            raise ValueError(f"{label} is required.")
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        raise ValueError(f"{label} must be a valid date.")
+
+
+def _json_error(e):
+    return JsonResponse({"error": str(e)}, status=400)
+
+
+@login_required
+@user_passes_test(is_admin)
+def driver_payments(request):
+    """All drivers' balances: what they owe and what they have paid."""
+    drivers = list(Driver.objects.select_related("user").order_by("user__first_name"))
+    accounts = accounts_for(drivers)
+    rows = [{"driver": d, "account": accounts[d.id]} for d in drivers]
+    show = request.GET.get("show", "owing")
+    if show == "owing":
+        rows = [r for r in rows if r["account"]["balance_due"] > 0]
+    rows.sort(key=lambda r: r["account"]["balance_due"], reverse=True)
+    totals = {
+        key: sum((a[key] for a in accounts.values()), Decimal("0"))
+        for key in ("fares_total", "company_total", "paid_total", "balance_due")
+    }
+    return render(request, "adminpanel/driver_payments.html", {
+        "rows": rows, "show": show, "totals": totals, "today": timezone.localdate(),
+    })
+
+
+@login_required
+@user_passes_test(is_admin)
+def driver_payment_add(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    driver = get_object_or_404(Driver, pk=pk)
+    try:
+        kind = request.POST.get("kind", "commission")
+        if kind not in DriverPayment.Kind.values:
+            raise ValueError("Choose what the payment is for.")
+        method = request.POST.get("method", "cash")
+        if method not in DriverPayment.Method.values:
+            raise ValueError("Choose a payment method.")
+        payment = DriverPayment.objects.create(
+            driver=driver,
+            kind=kind,
+            amount=_money(request.POST.get("amount", ""), "Amount"),
+            method=method,
+            reference=request.POST.get("reference", "").strip()[:100],
+            note=request.POST.get("note", "").strip(),
+            paid_on=_date(request.POST.get("paid_on"), "Payment date"),
+            recorded_by=request.user,
+        )
+    except ValueError as e:
+        return _json_error(e)
+    return JsonResponse({"ok": True, "id": str(payment.pk), "balance_due": str(driver_account(driver)["balance_due"])})
+
+
+@login_required
+@user_passes_test(is_admin)
+def driver_payment_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    get_object_or_404(DriverPayment, pk=pk).delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_admin)
+def driver_subscription_add(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    driver = get_object_or_404(Driver, pk=pk)
+    try:
+        plan = request.POST.get("plan", "free")
+        if plan not in DriverSubscription.Plan.values:
+            raise ValueError("Choose Free or Paid.")
+        starts_on = _date(request.POST.get("starts_on"), "Start date")
+        ends_on = _date(request.POST.get("ends_on"), "End date", required=plan == "paid")
+        if ends_on and ends_on < starts_on:
+            raise ValueError("The end date must be after the start date.")
+        fee = _money(request.POST.get("fee") or "0", "Fee", allow_zero=True) if plan == "paid" else 0
+        if plan == "paid" and fee == 0:
+            raise ValueError("Enter the fee for a paid subscription.")
+        DriverSubscription.objects.create(
+            driver=driver, plan=plan, starts_on=starts_on, ends_on=ends_on, fee=fee,
+            note=request.POST.get("note", "").strip(), created_by=request.user,
+        )
+    except ValueError as e:
+        return _json_error(e)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_admin)
+def driver_subscription_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    get_object_or_404(DriverSubscription, pk=pk).delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_admin)
+def driver_feedback_add(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    driver = get_object_or_404(Driver, pk=pk)
+    try:
+        category = request.POST.get("category", "")
+        if category not in DriverFeedback.Category.values:
+            raise ValueError("Choose Good, Bad or Issue.")
+        raw_stars = request.POST.get("stars", "").strip()
+        stars = int(raw_stars) if raw_stars else None
+        if stars is not None and not 1 <= stars <= 5:
+            raise ValueError("Stars must be between 1 and 5.")
+        comment = request.POST.get("comment", "").strip()
+        if not comment:
+            raise ValueError("Write a short comment.")
+        trip_id = request.POST.get("trip", "").strip()
+        trip = driver.trips.filter(pk=trip_id).first() if trip_id else None
+        DriverFeedback.objects.create(
+            driver=driver, trip=trip, category=category, stars=stars,
+            comment=comment, recorded_by=request.user,
+        )
+    except ValueError as e:
+        return _json_error(e)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_admin)
+def driver_feedback_resolve(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    feedback = get_object_or_404(DriverFeedback, pk=pk, category="issue")
+    feedback.is_resolved = not feedback.is_resolved
+    feedback.save()
+    return JsonResponse({"ok": True, "is_resolved": feedback.is_resolved})
+
+
+@login_required
+@user_passes_test(is_admin)
+def driver_feedback_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    get_object_or_404(DriverFeedback, pk=pk).delete()
     return JsonResponse({"ok": True})

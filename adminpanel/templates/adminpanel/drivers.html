@@ -1,4 +1,5 @@
 {% extends "adminpanel/base.html" %}
+{% load panel_extras %}
 {% block title %}Drivers{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -19,10 +20,11 @@
                     <th>Name</th>
                     <th>Phone</th>
                     <th>Vehicle</th>
-                    <th>License Plate</th>
-                    <th>License #</th>
+                    <th>Level</th>
+                    <th class="text-end">Trips</th>
+                    <th class="text-end">Balance owed</th>
+                    <th>Subscription</th>
                     <th>Status</th>
-                    <th>Registered</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -45,8 +47,16 @@
                     </td>
                     <td>{{ driver.user.phone_number|default:"—" }}</td>
                     <td>{{ driver.vehicle_type.display_name|default:"—" }}{% if driver.vehicle_name %} ({{ driver.vehicle_name }}{% if driver.vehicle_color %}, {{ driver.vehicle_color }}{% endif %}){% endif %}</td>
-                    <td>{{ driver.license_plate|default:"—" }}</td>
-                    <td>{{ driver.license_number|default:"—" }}</td>
+                    <td>
+                        {% include "adminpanel/_level_badge.html" with level=driver.account.level %}
+                        <div class="small text-muted"><i class="bi bi-star-fill text-warning"></i> {{ driver.rating_avg }} ({{ driver.rating_count }})</div>
+                    </td>
+                    <td class="text-end">{{ driver.account.completed_trips }}</td>
+                    <td class="text-end">
+                        {% if driver.account.balance_due > 0 %}<strong class="text-danger">{{ driver.account.balance_due|tzs }}</strong>
+                        {% else %}<span class="text-success small">Paid up</span>{% endif %}
+                    </td>
+                    <td>{% include "adminpanel/_sub_badge.html" with a=driver.account %}</td>
                     <td>
                         {% if driver.approval_status == 'pending' %}
                         <span class="badge badge-pending">Pending</span>
@@ -56,7 +66,6 @@
                         <span class="badge badge-rejected">Rejected</span>
                         {% endif %}
                     </td>
-                    <td>{{ driver.created_at|date:"M d, Y" }}</td>
                     <td>
                         <a href="{% url 'adminpanel:driver-detail' driver.id %}" class="btn btn-sm btn-outline-primary py-1">
                             <i class="bi bi-eye"></i>
@@ -64,7 +73,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="9" class="text-center text-muted py-4">No drivers found.</td></tr>
+                <tr><td colspan="10" class="text-center text-muted py-4">No drivers found.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

@@ -254,6 +254,9 @@
         <a href="{% url 'adminpanel:drivers' %}" class="{% if request.resolver_match.url_name == 'drivers' or request.resolver_match.url_name == 'driver-detail' %}active{% endif %}">
             <i class="bi bi-person-badge"></i> Drivers
         </a>
+        <a href="{% url 'adminpanel:driver-payments' %}" class="{% if request.resolver_match.url_name == 'driver-payments' %}active{% endif %}">
+            <i class="bi bi-cash-stack"></i> Driver Payments
+        </a>
         {% endif %}
         <a href="{% url 'adminpanel:orders' %}" class="{% if request.resolver_match.url_name == 'orders' %}active{% endif %}">
             <i class="bi bi-box"></i> Orders

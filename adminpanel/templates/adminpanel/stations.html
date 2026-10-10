@@ -70,6 +70,14 @@
                         <input name="longitude" id="addLng" class="form-control" inputmode="decimal" value="{{ form.longitude|default:'' }}" placeholder="39.2695">
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label">Pickup price per km (TSh)</label>
+                        <input name="price_per_km" class="form-control" inputmode="decimal" value="{{ form.price_per_km|default:'' }}" placeholder="Default {{ default_price_per_km }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Minimum pickup fare (TSh)</label>
+                        <input name="min_fare" class="form-control" inputmode="decimal" value="{{ form.min_fare|default:'' }}" placeholder="Optional">
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label">Fare zone</label>
                         <select name="zone" class="form-select">
                             <option value="">—</option>
@@ -111,6 +119,7 @@
                     <th>Code</th>
                     <th>Location</th>
                     <th>Coordinates</th>
+                    <th>Price / km</th>
                     <th>Fare zone</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -130,6 +139,10 @@
                         {% else %}
                         <span class="badge bg-warning text-dark">Missing</span>
                         {% endif %}
+                    </td>
+                    <td>
+                        {% if station.price_per_km is not None %}TSh {{ station.price_per_km|floatformat:0 }}{% else %}<span class="text-muted">Default ({{ default_price_per_km }})</span>{% endif %}
+                        {% if station.min_fare %}<div class="small text-muted">min TSh {{ station.min_fare|floatformat:0 }}</div>{% endif %}
                     </td>
                     <td>{{ station.zone.name|default:"—" }}</td>
                     <td>
@@ -161,7 +174,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="text-center text-muted py-4">
+                    <td colspan="8" class="text-center text-muted py-4">
                         No stations yet. Click <strong>Add Station</strong>, or use <strong>Import from main system</strong>.
                         Until you add stations, the apps keep using the main system's station list.
                     </td>

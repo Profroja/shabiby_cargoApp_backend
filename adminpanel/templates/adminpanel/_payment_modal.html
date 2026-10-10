@@ -1,0 +1,113 @@
+{% comment %}
+"Record Payment" popup. Open it with:
+openPaymentModal({ id, name, commissionDue, subscriptionDue })
+{% endcomment %}
+<div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="paymentForm" onsubmit="submitPayment(event)">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="paymentModalTitle">
+                        <i class="bi bi-cash-coin"></i> Record Payment
+                        <span id="paymentDriverName" class="text-muted fw-normal fs-6"></span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body row g-3">
+                    <div class="col-12">
+                        <div class="alert alert-light border small mb-0" id="paymentOwed"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Payment for</label>
+                        <select name="kind" class="form-select" onchange="showOwed()">
+                            <option value="commission">Trip commission</option>
+                            <option value="subscription">Subscription</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Amount (TSh)</label>
+                        <div class="input-group">
+                            <input name="amount" class="form-control" inputmode="decimal" required>
+                            <button type="button" class="btn btn-outline-secondary" onclick="payFullBalance()" title="Fill in the full amount owed">Full</button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Method</label>
+                        <select name="method" class="form-select">
+                            <option value="cash">Cash</option>
+                            <option value="mobile_money">Mobile money</option>
+                            <option value="bank">Bank</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Reference <span class="text-muted small">(optional)</span></label>
+                        <input name="reference" class="form-control" placeholder="e.g. M-Pesa code">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Date paid</label>
+                        <input name="paid_on" type="date" class="form-control" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Note <span class="text-muted small">(optional)</span></label>
+                        <textarea name="note" class="form-control" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+let paymentDriver = null;
+
+function localToday() {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function owedFor(kind) {
+    return kind === 'subscription' ? paymentDriver.subscriptionDue : paymentDriver.commissionDue;
+}
+
+function showOwed() {
+    const form = document.getElementById('paymentForm');
+    const kind = form.kind.value;
+    const owed = owedFor(kind);
+    const label = kind === 'subscription' ? 'subscription' : 'trip commission';
+    document.getElementById('paymentOwed').innerHTML = owed > 0
+        ? `Owed for ${label}: <strong>TSh ${Math.round(owed).toLocaleString('en-US')}</strong>`
+        : `Nothing is owed for ${label} right now.`;
+}
+
+function payFullBalance() {
+    const form = document.getElementById('paymentForm');
+    form.amount.value = Math.max(0, Math.round(owedFor(form.kind.value)));
+}
+
+function openPaymentModal(driver) {
+    paymentDriver = driver;
+    const form = document.getElementById('paymentForm');
+    form.reset();
+    form.paid_on.value = localToday();
+    form.kind.value = driver.commissionDue <= 0 && driver.subscriptionDue > 0 ? 'subscription' : 'commission';
+    document.getElementById('paymentDriverName').textContent = '· ' + driver.name;
+    showOwed();
+    bootstrap.Modal.getOrCreateInstance('#paymentModal').show();
+}
+
+async function submitPayment(event) {
+    event.preventDefault();
+    const fields = Object.fromEntries(new FormData(event.target));
+    try {
+        await panelPost(`/panel/drivers/${paymentDriver.id}/payments/add/`, fields);
+        bootstrap.Modal.getInstance('#paymentModal').hide();
+        await swalSuccess(`TSh ${Math.round(fields.amount.replace(/,/g, '')).toLocaleString('en-US')} recorded for ${paymentDriver.name}.`, 'Payment recorded');
+        location.reload();
+    } catch (err) {
+        swalError(err.message);
+    }
+}
+</script>
