@@ -263,6 +263,7 @@
     </div>
 </div>
 
+{% if user.role == 'admin' %}
     <div class="card stat-card mt-3 border-danger">
         <div class="card-body">
             <h5 class="card-title text-danger mb-3">Danger Zone</h5>
@@ -272,6 +273,7 @@
             </button>
         </div>
     </div>
+{% endif %}
 
 
 <script>

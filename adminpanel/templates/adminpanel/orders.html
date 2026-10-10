@@ -75,9 +75,9 @@
                     </td>
                     <td>{{ order.created_at|date:"M d, Y H:i" }}</td>
                     <td onclick="event.stopPropagation()">
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteOrder('{{ order.id }}')">
+                        {% if user.role == 'admin' %}<button class="btn btn-sm btn-outline-danger" onclick="deleteOrder('{{ order.id }}')">
                             <i class="bi bi-trash"></i>
-                        </button>
+                        </button>{% endif %}
                     </td>
                 </tr>
                 {% empty %}

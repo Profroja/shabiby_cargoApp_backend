@@ -1,17 +1,22 @@
 {% extends "adminpanel/base.html" %}
 {% block title %}Cargo Stations{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 gap-2 flex-wrap">
     <h2 class="mb-0">Cargo Stations</h2>
-    <form method="post" action="{% url 'adminpanel:station-import' %}"
-          onsubmit="event.preventDefault(); confirmImport(this);">
-        {% csrf_token %}
-        <button class="btn btn-outline-primary btn-sm"><i class="bi bi-cloud-download"></i> Import from main system</button>
-    </form>
+    <div class="d-flex gap-2">
+        <form method="post" action="{% url 'adminpanel:station-import' %}"
+              onsubmit="event.preventDefault(); confirmImport(this);">
+            {% csrf_token %}
+            <button class="btn btn-outline-primary btn-sm"><i class="bi bi-cloud-download"></i> Import from main system</button>
+        </form>
+        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addStationModal">
+            <i class="bi bi-plus-circle"></i> Add Station
+        </button>
+    </div>
 </div>
 
 {% if notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}
-{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+{% if error and not form %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
 {% if missing_coords %}
 <div class="alert alert-warning">
     <strong>{{ missing_coords }} station{{ missing_coords|pluralize }} without coordinates.</strong>
@@ -20,63 +25,72 @@
 </div>
 {% endif %}
 
-<div class="card stat-card mb-4">
-    <div class="card-header bg-white"><strong><i class="bi bi-plus-circle"></i> Add Station</strong></div>
-    <div class="card-body">
-        <p class="text-muted small mb-3">
-            To get coordinates: open Google Maps, right-click the station's exact location and click the
-            numbers at the top of the menu (e.g. <code>-6.8185, 39.2695</code>) to copy them.
-            The first number is the latitude, the second the longitude.
-        </p>
-        <form method="post" action="{% url 'adminpanel:stations' %}" class="row g-3">
-            {% csrf_token %}
-            <div class="col-md-4">
-                <label class="form-label">Station name</label>
-                <input name="name" class="form-control" value="{{ form.name|default:'' }}" placeholder="e.g. KARIAKOO" required>
+<div class="modal fade" id="addStationModal" tabindex="-1" aria-labelledby="addStationTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addStationTitle"><i class="bi bi-plus-circle"></i> Add Station</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="col-md-2">
-                <label class="form-label">Branch code</label>
-                <input name="branch_code" class="form-control text-uppercase" maxlength="10" value="{{ form.branch_code|default:'' }}" placeholder="DAR" required>
+            <div class="modal-body">
+                {% if error and form %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+                <p class="text-muted small mb-3">
+                    To get coordinates: open Google Maps, right-click the station's exact location and click the
+                    numbers at the top of the menu (e.g. <code>-6.8185, 39.2695</code>) to copy them.
+                    The first number is the latitude, the second the longitude.
+                </p>
+                <form method="post" action="{% url 'adminpanel:stations' %}" class="row g-3" id="addStationForm">
+                    {% csrf_token %}
+                    <div class="col-md-6">
+                        <label class="form-label">Station name</label>
+                        <input name="name" class="form-control" value="{{ form.name|default:'' }}" placeholder="e.g. KARIAKOO" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Branch code</label>
+                        <input name="branch_code" class="form-control text-uppercase" maxlength="10" value="{{ form.branch_code|default:'' }}" placeholder="DAR" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">City / area</label>
+                        <input name="city" class="form-control" value="{{ form.city|default:'' }}" placeholder="Kariakoo">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Region</label>
+                        <input name="region" class="form-control" value="{{ form.region|default:'' }}" placeholder="Dar es Salaam">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Street address</label>
+                        <input name="address" class="form-control" value="{{ form.address|default:'' }}" placeholder="Optional">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Latitude</label>
+                        <input name="latitude" class="form-control" inputmode="decimal" value="{{ form.latitude|default:'' }}" placeholder="-6.8185">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Longitude</label>
+                        <input name="longitude" class="form-control" inputmode="decimal" value="{{ form.longitude|default:'' }}" placeholder="39.2695">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Fare zone</label>
+                        <select name="zone" class="form-select">
+                            <option value="">—</option>
+                            {% for zone in zones %}
+                            <option value="{{ zone.id }}" {% if form.zone == zone.id|stringformat:"s" %}selected{% endif %}>{{ zone.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="is_active" {% if not form or form.is_active %}checked{% endif %}>
+                            <label class="form-check-label">Active</label>
+                        </div>
+                    </div>
+                </form>
             </div>
-            <div class="col-md-3">
-                <label class="form-label">City / area</label>
-                <input name="city" class="form-control" value="{{ form.city|default:'' }}" placeholder="Kariakoo">
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="addStationForm" class="btn btn-primary">Add Station</button>
             </div>
-            <div class="col-md-3">
-                <label class="form-label">Region</label>
-                <input name="region" class="form-control" value="{{ form.region|default:'' }}" placeholder="Dar es Salaam">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Street address</label>
-                <input name="address" class="form-control" value="{{ form.address|default:'' }}" placeholder="Optional">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Latitude</label>
-                <input name="latitude" class="form-control" inputmode="decimal" value="{{ form.latitude|default:'' }}" placeholder="-6.8185">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Longitude</label>
-                <input name="longitude" class="form-control" inputmode="decimal" value="{{ form.longitude|default:'' }}" placeholder="39.2695">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Fare zone</label>
-                <select name="zone" class="form-select">
-                    <option value="">—</option>
-                    {% for zone in zones %}
-                    <option value="{{ zone.id }}" {% if form.zone == zone.id|stringformat:"s" %}selected{% endif %}>{{ zone.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-1 d-flex align-items-end">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="is_active" {% if not form or form.is_active %}checked{% endif %}>
-                    <label class="form-check-label">Active</label>
-                </div>
-            </div>
-            <div class="col-md-1 d-flex align-items-end">
-                <button class="btn btn-primary w-100">Add</button>
-            </div>
-        </form>
+        </div>
     </div>
 </div>
 
@@ -121,6 +135,17 @@
                         <a href="{% url 'adminpanel:station-edit' station.pk %}" class="btn btn-sm btn-outline-primary py-1" title="Edit">
                             <i class="bi bi-pencil"></i>
                         </a>
+                        {% if station.is_active %}
+                        <button class="btn btn-sm btn-outline-secondary py-1" title="Deactivate"
+                                onclick="toggleStation('{{ station.pk }}', '{{ station.name|escapejs }}', true)">
+                            <i class="bi bi-pause-circle"></i> Deactivate
+                        </button>
+                        {% else %}
+                        <button class="btn btn-sm btn-outline-success py-1" title="Activate"
+                                onclick="toggleStation('{{ station.pk }}', '{{ station.name|escapejs }}', false)">
+                            <i class="bi bi-play-circle"></i> Activate
+                        </button>
+                        {% endif %}
                         <button class="btn btn-sm btn-outline-danger py-1" title="Delete" onclick="deleteStation('{{ station.pk }}', '{{ station.name|escapejs }}')">
                             <i class="bi bi-trash"></i>
                         </button>
@@ -129,7 +154,7 @@
                 {% empty %}
                 <tr>
                     <td colspan="7" class="text-center text-muted py-4">
-                        No stations yet. Add one above, or use <strong>Import from main system</strong>.
+                        No stations yet. Click <strong>Add Station</strong>, or use <strong>Import from main system</strong>.
                         Until you add stations, the apps keep using the main system's station list.
                     </td>
                 </tr>
@@ -142,6 +167,9 @@
 
 {% block scripts %}
 <script>
+{% if error and form %}
+document.addEventListener('DOMContentLoaded', () => new bootstrap.Modal('#addStationModal').show());
+{% endif %}
 {% if notice %}
 Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: '{{ notice|escapejs }}', showConfirmButton: false, timer: 3000 });
 {% endif %}
@@ -151,6 +179,21 @@ async function confirmImport(form) {
     if (!ok) return;
     swalLoading('Importing stations…');
     form.submit();
+}
+
+async function toggleStation(pk, name, isActive) {
+    const ok = await swalConfirm(
+        isActive ? 'Customers will no longer see this station in the app.' : 'Customers will be able to choose this station in the app.',
+        { title: `${isActive ? 'Deactivate' : 'Activate'} "${name}"?`, confirmText: isActive ? 'Deactivate' : 'Activate', danger: isActive },
+    );
+    if (!ok) return;
+    try {
+        const data = await panelPost(`/panel/stations/${pk}/toggle/`);
+        await swalSuccess(data.is_active ? 'Station activated.' : 'Station deactivated.');
+        location.reload();
+    } catch (err) {
+        swalError(err.message);
+    }
 }
 
 async function deleteStation(pk, name) {

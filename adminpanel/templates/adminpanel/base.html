@@ -178,25 +178,36 @@
         <a href="{% url 'adminpanel:dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
             <i class="bi bi-speedometer2"></i> Dashboard
         </a>
+        {% if user.role == 'admin' %}
         <a href="{% url 'adminpanel:customers' %}" class="{% if request.resolver_match.url_name == 'customers' %}active{% endif %}">
             <i class="bi bi-people"></i> Customers
         </a>
         <a href="{% url 'adminpanel:drivers' %}" class="{% if request.resolver_match.url_name == 'drivers' or request.resolver_match.url_name == 'driver-detail' %}active{% endif %}">
             <i class="bi bi-person-badge"></i> Drivers
         </a>
+        {% endif %}
         <a href="{% url 'adminpanel:orders' %}" class="{% if request.resolver_match.url_name == 'orders' %}active{% endif %}">
             <i class="bi bi-box"></i> Orders
         </a>
         <a href="{% url 'adminpanel:trips' %}" class="{% if request.resolver_match.url_name == 'trips' %}active{% endif %}">
             <i class="bi bi-truck"></i> Trips
         </a>
+        {% if user.role == 'admin' %}
         <a href="{% url 'adminpanel:stations' %}" class="{% if request.resolver_match.url_name == 'stations' or request.resolver_match.url_name == 'station-edit' %}active{% endif %}">
             <i class="bi bi-building"></i> Cargo Stations
         </a>
         <a href="{% url 'adminpanel:commissions' %}" class="{% if request.resolver_match.url_name == 'commissions' or request.resolver_match.url_name == 'commission-edit' %}active{% endif %}">
             <i class="bi bi-percent"></i> Commissions
         </a>
+        <a href="{% url 'adminpanel:staff' %}" class="{% if request.resolver_match.url_name == 'staff' %}active{% endif %}">
+            <i class="bi bi-person-gear"></i> Staff Users
+        </a>
+        {% endif %}
         <div style="position: absolute; bottom: 20px; width: 100%;">
+            <div class="px-3 pb-2 small" style="color: rgba(255,255,255,0.75);">
+                <div class="fw-semibold text-white">{{ user.first_name|default:user.username }}</div>
+                {% if user.role == 'admin' %}Global admin{% else %}{{ user.station.name|default:"Station staff" }}{% endif %}
+            </div>
             <a href="{% url 'adminpanel:logout' %}" class="logout">
                 <i class="bi bi-box-arrow-right"></i> Logout
             </a>

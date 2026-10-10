@@ -1,6 +1,7 @@
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.shortcuts import redirect, render, get_object_or_404
+from django.db.models import Q
 from django.http import JsonResponse
 from django.urls import reverse
 
@@ -25,20 +26,41 @@ def _get_station_name_map():
 
 
 def is_admin(user):
-    return user.is_authenticated and user.role == "admin"
+    """Global admin: sees and manages everything."""
+    return user.is_authenticated and user.is_active and user.role == "admin"
+
+
+def is_panel_user(user):
+    """Global admins, plus station staff that are assigned to a station."""
+    return is_admin(user) or (
+        user.is_authenticated and user.is_active and user.role == "agent" and user.station_id is not None
+    )
+
+
+def _scoped_orders(user):
+    """All orders for admins; staff only see orders leaving from or going to their station."""
+    qs = CargoOrder.objects.all()
+    if not is_admin(user):
+        station_id = str(user.station_id)
+        qs = qs.filter(Q(origin_station=station_id) | Q(destination_station=station_id))
+    return qs
 
 
 def admin_login(request):
-    if request.user.is_authenticated and request.user.role == "admin":
+    if is_panel_user(request.user):
         return redirect("adminpanel:dashboard")
     if request.method == "POST":
         username = request.POST.get("username", "")
         password = request.POST.get("password", "")
         user = authenticate(request, username=username, password=password)
-        if user and user.role == "admin":
+        if user and is_panel_user(user):
             login(request, user)
             return redirect("adminpanel:dashboard")
-        return render(request, "adminpanel/login.html", {"error": "Invalid credentials or not an admin account."})
+        if user and user.role == "agent":
+            error = "Your account is not assigned to a cargo station yet. Ask an admin."
+        else:
+            error = "Invalid credentials or not a staff account."
+        return render(request, "adminpanel/login.html", {"error": error})
     return render(request, "adminpanel/login.html")
 
 
@@ -48,8 +70,21 @@ def admin_logout(request):
 
 
 @login_required
-@user_passes_test(is_admin)
+@user_passes_test(is_panel_user)
 def dashboard(request):
+    if not is_admin(request.user):
+        orders = _scoped_orders(request.user)
+        station_id = str(request.user.station_id)
+        return render(request, "adminpanel/dashboard.html", {
+            "station": request.user.station,
+            "total_orders": orders.count(),
+            "awaiting_fare": orders.filter(shipping_fare_status=CargoOrder.ShippingFareStatus.PENDING).count(),
+            "at_station": orders.filter(origin_station=station_id, status=CargoOrder.Status.AT_ORIGIN_STATION).count(),
+            "incoming": orders.filter(destination_station=station_id, status=CargoOrder.Status.IN_TRANSIT).count(),
+            "ready_for_collection": orders.filter(
+                destination_station=station_id, status=CargoOrder.Status.ARRIVED_AT_DESTINATION
+            ).count(),
+        })
     total_customers = User.objects.filter(role="customer").count()
     total_drivers = Driver.objects.count()
     pending_drivers = Driver.objects.filter(approval_status="pending").count()
@@ -137,9 +172,9 @@ def driver_delete(request, pk):
 
 
 @login_required
-@user_passes_test(is_admin)
+@user_passes_test(is_panel_user)
 def order_list(request):
-    orders = CargoOrder.objects.select_related("customer").order_by("-created_at")
+    orders = _scoped_orders(request.user).select_related("customer").order_by("-created_at")
     station_map = _get_station_name_map()
     for order in orders:
         order.origin_station_name = station_map.get(str(order.origin_station), order.origin_station)
@@ -148,9 +183,9 @@ def order_list(request):
 
 
 @login_required
-@user_passes_test(is_admin)
+@user_passes_test(is_panel_user)
 def order_detail(request, pk):
-    order = get_object_or_404(CargoOrder.objects.select_related("customer"), pk=pk)
+    order = get_object_or_404(_scoped_orders(request.user).select_related("customer"), pk=pk)
     pickup_trip = CargoTrip.objects.filter(order=order, leg_type=CargoTrip.LegType.PICKUP).first()
     station_map = _get_station_name_map()
     order.origin_station_name = station_map.get(str(order.origin_station), order.origin_station)
@@ -176,11 +211,11 @@ def order_detail(request, pk):
 
 
 @login_required
-@user_passes_test(is_admin)
+@user_passes_test(is_panel_user)
 def order_set_fare(request, pk):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
-    order = get_object_or_404(CargoOrder, pk=pk)
+    order = get_object_or_404(_scoped_orders(request.user), pk=pk)
     fare = request.POST.get("shipping_fare")
     if not fare:
         return JsonResponse({"error": "shipping_fare is required"}, status=400)
@@ -195,11 +230,11 @@ def order_set_fare(request, pk):
 
 
 @login_required
-@user_passes_test(is_admin)
+@user_passes_test(is_panel_user)
 def order_update_status(request, pk):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
-    order = get_object_or_404(CargoOrder, pk=pk)
+    order = get_object_or_404(_scoped_orders(request.user), pk=pk)
     error = order.advance_station_status(request.POST.get("status"))
     if error:
         return JsonResponse({"error": error}, status=400)
@@ -207,9 +242,11 @@ def order_update_status(request, pk):
 
 
 @login_required
-@user_passes_test(is_admin)
+@user_passes_test(is_panel_user)
 def trip_list(request):
     trips = CargoTrip.objects.select_related("order", "order__customer", "driver", "driver__user").order_by("-created_at")
+    if not is_admin(request.user):
+        trips = trips.filter(order__in=_scoped_orders(request.user))
     return render(request, "adminpanel/trips.html", {"trips": trips})
 
 
@@ -431,6 +468,18 @@ def station_delete(request, pk):
 
 @login_required
 @user_passes_test(is_admin)
+def station_toggle(request, pk):
+    """Turn a station on or off in the apps."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    station = get_object_or_404(CargoStation, pk=pk)
+    station.is_active = not station.is_active
+    station.save(update_fields=["is_active", "updated_at"])
+    return JsonResponse({"ok": True, "is_active": station.is_active})
+
+
+@login_required
+@user_passes_test(is_admin)
 def station_import(request):
     """Copy the main Shabiby system's stations in. Existing branch codes are skipped."""
     if request.method != "POST":
@@ -459,3 +508,126 @@ def station_import(request):
         )
         created += 1
     return redirect(f"{reverse('adminpanel:stations')}?notice=Imported {created} station(s).")
+
+
+# ---------- Staff users ----------
+
+STAFF_ROLES = ("admin", "agent")
+
+
+def _staff_page(request, error=None, status=200):
+    return render(
+        request,
+        "adminpanel/staff.html",
+        {
+            "staff": User.objects.filter(role__in=STAFF_ROLES).select_related("station").order_by("role", "first_name"),
+            "stations": CargoStation.objects.filter(is_active=True).order_by("name"),
+            "error": error,
+        },
+        status=status,
+    )
+
+
+def _parse_staff_form(post, editing=None):
+    """Return cleaned fields (password may be None when editing), or raise ValueError."""
+    first_name = post.get("first_name", "").strip()
+    last_name = post.get("last_name", "").strip()
+    username = post.get("username", "").strip()
+    phone = post.get("phone_number", "").strip() or None
+    email = post.get("email", "").strip() or None
+    role = post.get("role", "agent")
+    password = post.get("password", "")
+    station_id = post.get("station", "").strip()
+
+    if not first_name or not username:
+        raise ValueError("First name and username are required.")
+    if role not in STAFF_ROLES:
+        raise ValueError("Choose a valid role.")
+    station = None
+    if role == "agent":
+        station = CargoStation.objects.filter(pk=station_id).first() if station_id else None
+        if station is None:
+            raise ValueError("Station staff must be assigned to a cargo station.")
+    if editing is None and len(password) < 6:
+        raise ValueError("Password must be at least 6 characters.")
+    if editing is not None and password and len(password) < 6:
+        raise ValueError("New password must be at least 6 characters.")
+
+    others = User.objects.exclude(pk=editing.pk) if editing else User.objects.all()
+    if others.filter(username=username).exists():
+        raise ValueError(f"The username '{username}' is already taken.")
+    if phone and others.filter(phone_number=phone).exists():
+        raise ValueError(f"The phone number {phone} already belongs to another account.")
+    if email and others.filter(email=email).exists():
+        raise ValueError(f"The email {email} already belongs to another account.")
+
+    return {
+        "first_name": first_name,
+        "last_name": last_name,
+        "username": username,
+        "phone_number": phone,
+        "email": email,
+        "role": role,
+        "station": station,
+        "password": password or None,
+    }
+
+
+@login_required
+@user_passes_test(is_admin)
+def staff_list(request):
+    if request.method == "POST":
+        try:
+            data = _parse_staff_form(request.POST)
+        except ValueError as e:
+            return _staff_page(request, error=str(e), status=400)
+        password = data.pop("password")
+        User.objects.create_user(password=password, is_active=True, **data)
+        return redirect("adminpanel:staff")
+    return _staff_page(request)
+
+
+@login_required
+@user_passes_test(is_admin)
+def staff_edit(request, pk):
+    if request.method != "POST":
+        return redirect("adminpanel:staff")
+    member = get_object_or_404(User, pk=pk, role__in=STAFF_ROLES)
+    try:
+        data = _parse_staff_form(request.POST, editing=member)
+    except ValueError as e:
+        return _staff_page(request, error=str(e), status=400)
+    if member.pk == request.user.pk and data["role"] != "admin":
+        return _staff_page(request, error="You can't remove your own admin access.", status=400)
+    password = data.pop("password")
+    for field, value in data.items():
+        setattr(member, field, value)
+    if password:
+        member.set_password(password)
+    member.save()
+    return redirect("adminpanel:staff")
+
+
+@login_required
+@user_passes_test(is_admin)
+def staff_toggle(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    member = get_object_or_404(User, pk=pk, role__in=STAFF_ROLES)
+    if member.pk == request.user.pk:
+        return JsonResponse({"error": "You can't deactivate your own account."}, status=400)
+    member.is_active = not member.is_active
+    member.save(update_fields=["is_active", "updated_at"])
+    return JsonResponse({"ok": True, "is_active": member.is_active})
+
+
+@login_required
+@user_passes_test(is_admin)
+def staff_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    member = get_object_or_404(User, pk=pk, role__in=STAFF_ROLES)
+    if member.pk == request.user.pk:
+        return JsonResponse({"error": "You can't delete your own account."}, status=400)
+    member.delete()
+    return JsonResponse({"ok": True})

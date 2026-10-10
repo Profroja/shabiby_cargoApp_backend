@@ -43,7 +43,7 @@ class User(AbstractBaseUser):
         DRIVER = "driver", "Driver"
         ACCOUNTANT = "accountant", "Accountant"
         ADMIN = "admin", "Admin"
-        AGENT = "agent", "Agent"
+        AGENT = "agent", "Station Staff"
 
     class AuthProvider(models.TextChoices):
         PHONE = "phone", "Phone"
@@ -65,6 +65,14 @@ class User(AbstractBaseUser):
         max_length=15, choices=Role.choices, default=Role.CUSTOMER
     )
     is_active = models.BooleanField(default=True)
+    # Station staff (role "agent") only see orders for this cargo station.
+    station = models.ForeignKey(
+        "stations.CargoStation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="staff",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

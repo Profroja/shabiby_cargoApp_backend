@@ -70,6 +70,11 @@ def update_order_status(request, pk):
     except CargoOrder.DoesNotExist:
         return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
 
+    if request.user.role == "agent":
+        station_id = str(request.user.station_id or "")
+        if not station_id or station_id not in (str(order.origin_station), str(order.destination_station)):
+            return Response({"error": "This order is not for your station."}, status=status.HTTP_403_FORBIDDEN)
+
     error = order.advance_station_status(request.data.get("status"))
     if error:
         return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
