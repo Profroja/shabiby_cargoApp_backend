@@ -34,10 +34,12 @@ def band_fare(station_id, distance_km):
     km = Decimal(str(distance_km or 0))
     # Ranges in order; a distance uses the first range it doesn't exceed, so small
     # gaps between ranges (e.g. 0–1 then 1.1–2 for 1.05 km) still get a fare.
-    for band in sorted(bands, key=lambda b: b.min_km):
+    ordered = sorted(bands, key=lambda b: b.min_km)
+    for band in ordered:
         if band.max_km is None or km <= band.max_km:
             return band.fare
-    return None
+    # Longer than every range: a station with ranges keeps its own top fare.
+    return ordered[-1].fare if ordered else None
 
 
 def pickup_fare(station_id, distance_km, vehicle_type):
