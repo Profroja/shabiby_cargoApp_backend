@@ -9,6 +9,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from drivers.dispatch import driver_station_ids
 from drivers.models import Driver
 from drivers.performance import can_accept_trips, trip_split
 from orders.models import CargoOrder
@@ -80,49 +81,33 @@ class CargoTripDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ---------- Driver trip APIs ----------
 
 class DriverAvailableTripsView(generics.ListAPIView):
-    """List trips with no driver assigned, available for the logged-in driver.
-    Filters by driver's region (nearest cargo center name)."""
+    """Open pickup requests at the driver's cargo station that they haven't declined."""
     serializer_class = CargoTripSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        logger.error(f"[DriverAvailableTripsView] User: {self.request.user.phone_number}, Role: {self.request.user.role}")
         if self.request.user.role != "driver":
-            logger.error(f"[DriverAvailableTripsView] User is not a driver, returning empty queryset")
             return CargoTrip.objects.none()
-
         try:
             driver = self.request.user.driver
         except Driver.DoesNotExist:
             return CargoTrip.objects.none()
 
-        trips = CargoTrip.objects.filter(
-            driver__isnull=True,
-            status__in=["requested", "searching_driver"],
-        ).exclude(
-            declines__driver=driver,
-        ).select_related("order", "order__customer").order_by("-created_at")
+        station_ids = driver_station_ids(driver)
+        if not station_ids:
+            # No cargo station on the driver's account yet: an admin must set one.
+            return CargoTrip.objects.none()
 
-        # Filter by driver's region: match trip's destination_station (nearest cargo
-        # center to the customer's pickup) to the driver's registered region.
-        driver_region = (driver.region or "").strip()
-        if driver_region:
-            from stations.views import _get_center_map
-            center_map = _get_center_map()
-            # Find cargo center IDs whose center_name matches the driver's region
-            matching_station_ids = [
-                sid for sid, cdata in center_map.items()
-                if (cdata.get("center_name", "") or cdata.get("name", "")).strip().lower() == driver_region.lower()
-            ]
-            if matching_station_ids:
-                trips = trips.filter(destination_station__in=matching_station_ids)
-            else:
-                # No matching stations found for driver's region — no trips
-                logger.error(f"[DriverAvailableTripsView] No stations found for region '{driver_region}', returning empty")
-                return CargoTrip.objects.none()
-
-        logger.error(f"[DriverAvailableTripsView] Found {trips.count()} available trips for region '{driver_region}'")
-        return trips
+        return (
+            CargoTrip.objects.filter(
+                driver__isnull=True,
+                status__in=["requested", "searching_driver"],
+                destination_station__in=station_ids,
+            )
+            .exclude(declines__driver=driver)
+            .select_related("order", "order__customer")
+            .order_by("-created_at")
+        )
 
 
 class DriverMyTripsView(generics.ListAPIView):
@@ -178,6 +163,12 @@ def accept_trip(request, pk):
     trip = CargoTrip.objects.filter(pk=pk, driver__isnull=True, status__in=["requested", "searching_driver"]).first()
     if not trip:
         return Response({"error": "Trip not available."}, status=status.HTTP_404_NOT_FOUND)
+
+    if str(trip.destination_station) not in driver_station_ids(driver):
+        return Response(
+            {"error": "This request belongs to another cargo station."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     trip.driver = driver
     trip.status = CargoTrip.Status.DRIVER_ASSIGNED

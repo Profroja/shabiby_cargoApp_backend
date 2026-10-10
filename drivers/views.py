@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from .dispatch import local_station
 from .models import Driver
 from .serializers import DriverMeSerializer, DriverProfileSerializer, DriverRegistrationSerializer
 
@@ -64,6 +65,7 @@ class DriverRegisterView(generics.CreateAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        station = local_station(data.get("station"))
         driver = Driver.objects.create(
             user=user,
             vehicle_type=vehicle_type,
@@ -73,7 +75,8 @@ class DriverRegisterView(generics.CreateAPIView):
             license_number=data["license_number"],
             license_photo=data["license_photo"],
             profile_photo=data["profile_photo"],
-            region=data.get("region", ""),
+            region=station.name if station else data.get("region", ""),
+            station=station,
         )
 
         # Issue fresh JWT tokens

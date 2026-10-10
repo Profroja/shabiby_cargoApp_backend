@@ -1,4 +1,5 @@
 import logging
+import time
 
 import requests
 from django.conf import settings
@@ -12,6 +13,11 @@ EXTERNAL_API_USER = getattr(settings, "EXTERNAL_API_USER", "cargoadmin")
 EXTERNAL_API_PASS = getattr(settings, "EXTERNAL_API_PASS", "cargoadmin12345?")
 
 _cached_token = None
+
+# The main system's station list barely changes, but drivers' phones poll the
+# request list every few seconds; keep it for a few minutes per process.
+EXTERNAL_CACHE_SECONDS = 300
+_external_cache = {}
 
 
 def _get_external_token():
@@ -31,7 +37,17 @@ def _get_external_token():
 
 
 def _fetch_external_centers(active_only=True):
-    """Stations from the main Shabiby system (shabibycargo.co.tz)."""
+    """Stations from the main Shabiby system (shabibycargo.co.tz), cached briefly."""
+    cached = _external_cache.get(active_only)
+    if cached and time.monotonic() - cached[0] < EXTERNAL_CACHE_SECONDS:
+        return cached[1]
+    data = _fetch_external_centers_uncached(active_only)
+    if data is not None:
+        _external_cache[active_only] = (time.monotonic(), data)
+    return data
+
+
+def _fetch_external_centers_uncached(active_only):
     token = _cached_token or _get_external_token()
     if not token:
         return None

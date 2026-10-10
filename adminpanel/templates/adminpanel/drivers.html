@@ -19,6 +19,7 @@
                     <th>Photo</th>
                     <th>Name</th>
                     <th>Phone</th>
+                    <th>Cargo Station</th>
                     <th>Vehicle</th>
                     <th>Level</th>
                     <th class="text-end">Trips</th>
@@ -46,7 +47,13 @@
                         </a>
                     </td>
                     <td>{{ driver.user.phone_number|default:"—" }}</td>
-                    <td>{{ driver.vehicle_type.display_name|default:"—" }}{% if driver.vehicle_name %} ({{ driver.vehicle_name }}{% if driver.vehicle_color %}, {{ driver.vehicle_color }}{% endif %}){% endif %}</td>
+                    <td>
+                        {% if driver.station %}{{ driver.station.name }}
+                        {% elif driver.region %}{{ driver.region }} <span class="badge bg-light text-dark border" title="Station saved by name only; link it on the driver page">name only</span>
+                        {% else %}<span class="badge bg-warning text-dark">Not set</span>{% endif %}
+                    </td>
+                    <td>{{ driver.vehicle_type.display_name|default:"—" }}{% if driver.vehicle_name %} ({{ driver.vehicle_name }}{% if driver.vehicle_color %}, {{ driver.vehicle_color }}{% endif %}){% endif %}
+                        {% if driver.license_plate %}<div class="small text-muted"><i class="bi bi-card-text"></i> {{ driver.license_plate }}</div>{% endif %}</td>
                     <td>
                         {% include "adminpanel/_level_badge.html" with level=driver.account.level %}
                         <div class="small text-muted"><i class="bi bi-star-fill text-warning"></i> {{ driver.rating_avg }} ({{ driver.rating_count }})</div>
@@ -73,7 +80,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="10" class="text-center text-muted py-4">No drivers found.</td></tr>
+                <tr><td colspan="11" class="text-center text-muted py-4">No drivers found.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

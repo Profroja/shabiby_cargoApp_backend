@@ -36,6 +36,15 @@
     </div>
 </div>
 
+{% if driver.approval_status == 'pending' %}
+<div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <div><i class="bi bi-hourglass-split"></i> <strong>Waiting for approval.</strong> Check the details and photos in <strong>Details &amp; Approval</strong> below.</div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-success" onclick="approveDriver('approved')"><i class="bi bi-check-lg"></i> Approve</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="approveDriver('rejected')"><i class="bi bi-x-lg"></i> Reject</button>
+    </div>
+</div>
+{% endif %}
 {% if account.subscription_status == 'expired' %}
 <div class="alert alert-danger d-flex align-items-center gap-2">
     <i class="bi bi-exclamation-octagon fs-5"></i>
@@ -95,16 +104,110 @@
 </div>
 
 <ul class="nav nav-tabs mb-3" role="tablist">
-    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#trips" type="button" role="tab">Trips <span class="badge bg-secondary">{{ trips|length }}</span></button></li>
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#details" type="button" role="tab">Details &amp; Approval</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#trips" type="button" role="tab">Trips <span class="badge bg-secondary">{{ trips|length }}</span></button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#payments" type="button" role="tab">Payments <span class="badge bg-secondary">{{ payments|length }}</span></button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#subscription" type="button" role="tab">Subscription</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#feedback" type="button" role="tab">Feedback &amp; Level <span class="badge bg-secondary">{{ ratings|length }}</span></button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab">Profile</button></li>
 </ul>
 
 <div class="tab-content">
+    <!-- Details & approval -->
+    <div class="tab-pane fade show active" id="details" role="tabpanel">
+        <div class="row g-3">
+            <div class="col-lg-7">
+                <div class="card stat-card mb-3">
+                    <div class="card-body">
+                        <h6 class="mb-3"><i class="bi bi-person"></i> Driver details</h6>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tr><td class="text-muted" style="width: 170px;">Full name</td><td><strong>{{ driver.user.first_name }} {{ driver.user.middle_name }} {{ driver.user.last_name }}</strong></td></tr>
+                            <tr><td class="text-muted">Phone</td><td>{{ driver.user.phone_number|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">Driving license no.</td><td>{{ driver.license_number|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">National ID</td><td>{{ driver.national_id_number|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">Registered</td><td>{{ driver.created_at|date:"M d, Y H:i" }}</td></tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="card stat-card mb-3">
+                    <div class="card-body">
+                        <h6 class="mb-1"><i class="bi bi-building"></i> Cargo station</h6>
+                        <p class="text-muted small mb-2">The driver only receives pickup requests at this station.</p>
+                        {% if not driver.station and not driver.region %}
+                        <div class="alert alert-warning py-2 small mb-2"><i class="bi bi-exclamation-triangle"></i> No station set, so this driver receives no requests.</div>
+                        {% elif not driver.station %}
+                        <div class="alert alert-light border py-2 small mb-2">Registered with the station name <strong>{{ driver.region }}</strong>. Choose the station below to link it properly.</div>
+                        {% endif %}
+                        <div class="d-flex gap-2">
+                            <select id="stationSelect" class="form-select">
+                                <option value="">No station</option>
+                                {% for st in stations %}
+                                <option value="{{ st.pk }}" {% if driver.station_id == st.pk %}selected{% endif %}>{{ st.name }} ({{ st.branch_code }})</option>
+                                {% endfor %}
+                            </select>
+                            <button class="btn btn-primary text-nowrap" onclick="saveStation()">Save</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card stat-card mb-3">
+                    <div class="card-body">
+                        <h6 class="mb-3"><i class="bi bi-truck"></i> Vehicle</h6>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tr><td class="text-muted" style="width: 170px;">Type</td><td>{{ driver.vehicle_type.display_name|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">Name / model</td><td>{{ driver.vehicle_name|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">Color</td><td>{{ driver.vehicle_color|default:"—" }}</td></tr>
+                            <tr><td class="text-muted">License plate</td><td><strong>{{ driver.license_plate|default:"—" }}</strong></td></tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h6 class="mb-3"><i class="bi bi-check-circle"></i> Approval</h6>
+                        {% if driver.approval_status == 'pending' %}
+                        <p class="small text-muted">Check the details and both photos, then approve or reject.</p>
+                        {% elif driver.approval_status == 'approved' %}
+                        <p class="small text-success"><i class="bi bi-check-circle"></i> Approved: this driver can receive and accept trips.</p>
+                        {% else %}
+                        <p class="small text-danger"><i class="bi bi-x-circle"></i> Rejected: this driver can't take trips.</p>
+                        {% endif %}
+                        <div class="d-flex gap-2 flex-wrap">
+                            {% if driver.approval_status != 'approved' %}
+                            <button class="btn btn-success" onclick="approveDriver('approved')"><i class="bi bi-check-lg"></i> Approve</button>
+                            {% endif %}
+                            {% if driver.approval_status != 'rejected' %}
+                            <button class="btn btn-outline-danger" onclick="approveDriver('rejected')"><i class="bi bi-x-lg"></i> {% if driver.approval_status == 'approved' %}Revoke approval{% else %}Reject{% endif %}</button>
+                            {% endif %}
+                            <button class="btn btn-outline-danger" onclick="deleteDriver()"><i class="bi bi-trash"></i> Delete driver</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="card stat-card mb-3">
+                    <div class="card-body">
+                        <h6 class="mb-2"><i class="bi bi-person-square"></i> Profile photo</h6>
+                        {% if driver.profile_photo %}
+                        <img src="{{ driver.profile_photo.url }}" class="img-fluid rounded w-100" style="max-height: 360px; object-fit: contain; cursor: zoom-in;" alt="Profile photo" onclick="window.open('{{ driver.profile_photo.url }}', '_blank')">
+                        {% else %}
+                        <p class="text-muted small mb-0">No profile photo uploaded.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h6 class="mb-2"><i class="bi bi-person-vcard"></i> Driving license / ID photo</h6>
+                        {% if driver.license_photo %}
+                        <img src="{{ driver.license_photo.url }}" class="img-fluid rounded w-100" style="max-height: 360px; object-fit: contain; cursor: zoom-in;" alt="License photo" onclick="window.open('{{ driver.license_photo.url }}', '_blank')">
+                        {% else %}
+                        <p class="text-muted small mb-0">No license photo uploaded.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Trips -->
-    <div class="tab-pane fade show active" id="trips" role="tabpanel">
+    <div class="tab-pane fade" id="trips" role="tabpanel">
         <div class="card stat-card">
             <div class="table-responsive">
                 <table class="table table-hover mb-0 align-middle">
@@ -342,60 +445,6 @@
         </div>
     </div>
 
-    <!-- Profile -->
-    <div class="tab-pane fade" id="profile" role="tabpanel">
-        <div class="row g-3">
-            <div class="col-md-6">
-                <div class="card stat-card mb-3">
-                    <div class="card-body">
-                        <h6 class="mb-3"><i class="bi bi-person"></i> Driver</h6>
-                        <table class="table table-sm table-borderless mb-0">
-                            <tr><td class="text-muted" style="width: 150px;">Phone</td><td>{{ driver.user.phone_number|default:"—" }}</td></tr>
-                            <tr><td class="text-muted">License number</td><td>{{ driver.license_number|default:"—" }}</td></tr>
-                            <tr><td class="text-muted">National ID</td><td>{{ driver.national_id_number|default:"—" }}</td></tr>
-                            <tr><td class="text-muted">Region</td><td>{{ driver.region|default:"—" }}</td></tr>
-                            <tr><td class="text-muted">Registered</td><td>{{ driver.created_at|date:"M d, Y H:i" }}</td></tr>
-                        </table>
-                    </div>
-                </div>
-                <div class="card stat-card">
-                    <div class="card-body">
-                        <h6 class="mb-3"><i class="bi bi-truck"></i> Vehicle</h6>
-                        <table class="table table-sm table-borderless mb-0">
-                            <tr><td class="text-muted" style="width: 150px;">Type</td><td>{{ driver.vehicle_type.display_name|default:"—" }}</td></tr>
-                            <tr><td class="text-muted">Name</td><td>{{ driver.vehicle_name|default:"—" }}</td></tr>
-                            <tr><td class="text-muted">Color</td><td>{{ driver.vehicle_color|default:"—" }}</td></tr>
-                            <tr><td class="text-muted">License plate</td><td><strong>{{ driver.license_plate|default:"—" }}</strong></td></tr>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                {% if driver.license_photo %}
-                <div class="card stat-card mb-3">
-                    <div class="card-body">
-                        <h6 class="mb-2"><i class="bi bi-person-vcard"></i> License / ID photo</h6>
-                        <img src="{{ driver.license_photo.url }}" class="img-fluid rounded" style="cursor: pointer;" alt="License" onclick="window.open('{{ driver.license_photo.url }}', '_blank')">
-                    </div>
-                </div>
-                {% endif %}
-                <div class="card stat-card">
-                    <div class="card-body">
-                        <h6 class="mb-3"><i class="bi bi-check-circle"></i> Approval</h6>
-                        <div class="d-flex gap-2 flex-wrap">
-                            {% if driver.approval_status != 'approved' %}
-                            <button class="btn btn-success" onclick="approveDriver('approved')"><i class="bi bi-check-lg"></i> Approve</button>
-                            {% endif %}
-                            {% if driver.approval_status != 'rejected' %}
-                            <button class="btn btn-outline-danger" onclick="approveDriver('rejected')"><i class="bi bi-x-lg"></i> {% if driver.approval_status == 'approved' %}Revoke approval{% else %}Reject{% endif %}</button>
-                            {% endif %}
-                            <button class="btn btn-outline-danger" onclick="deleteDriver()"><i class="bi bi-trash"></i> Delete driver</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 
 <!-- Set subscription -->
@@ -604,6 +653,17 @@ async function resolveIssue(url, isResolved) {
 async function deleteRecord(url, question) {
     const ok = await swalConfirm('This cannot be undone.', { title: question, confirmText: 'Delete', danger: true });
     if (ok) postAndReload(url, null, 'Deleted.');
+}
+
+// --- Cargo station ---
+async function saveStation() {
+    const select = document.getElementById('stationSelect');
+    const name = select.value ? select.options[select.selectedIndex].text : 'no station';
+    const ok = await swalConfirm(
+        select.value ? `The driver will only receive pickup requests at ${name}.` : 'The driver will receive no pickup requests until a station is set.',
+        { title: 'Change cargo station?', confirmText: 'Save', danger: !select.value },
+    );
+    if (ok) postAndReload("{% url 'adminpanel:driver-set-station' driver.id %}", { station: select.value }, 'Cargo station saved.');
 }
 
 // --- Approval ---

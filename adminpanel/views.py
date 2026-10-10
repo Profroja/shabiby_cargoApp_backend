@@ -137,7 +137,7 @@ def customer_delete(request, pk):
 @user_passes_test(is_admin)
 def driver_list(request):
     status_filter = request.GET.get("status", "")
-    drivers = Driver.objects.select_related("user", "vehicle_type").order_by("-created_at")
+    drivers = Driver.objects.select_related("user", "vehicle_type", "station").order_by("-created_at")
     if status_filter:
         drivers = drivers.filter(approval_status=status_filter)
     drivers = list(drivers)
@@ -150,7 +150,7 @@ def driver_list(request):
 @login_required
 @user_passes_test(is_admin)
 def driver_detail(request, pk):
-    driver = get_object_or_404(Driver.objects.select_related("user", "vehicle_type"), pk=pk)
+    driver = get_object_or_404(Driver.objects.select_related("user", "vehicle_type", "station"), pk=pk)
     trips = list(
         driver.trips.select_related("order", "order__customer").order_by("-created_at")
     )
@@ -195,6 +195,7 @@ def driver_detail(request, pk):
         "ratings": ratings,
         "levels": LEVELS,
         "today": timezone.localdate(),
+        "stations": CargoStation.objects.filter(is_active=True).order_by("name"),
     })
 
 
@@ -871,3 +872,20 @@ def driver_feedback_delete(request, pk):
         return JsonResponse({"error": "POST required"}, status=405)
     get_object_or_404(DriverFeedback, pk=pk).delete()
     return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_admin)
+def driver_set_station(request, pk):
+    """Assign the cargo station whose pickup requests this driver receives."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    driver = get_object_or_404(Driver, pk=pk)
+    station_id = request.POST.get("station", "").strip()
+    station = CargoStation.objects.filter(pk=station_id).first() if station_id else None
+    if station_id and station is None:
+        return JsonResponse({"error": "Station not found."}, status=400)
+    driver.station = station
+    driver.region = station.name if station else ""
+    driver.save(update_fields=["station", "region", "updated_at"])
+    return JsonResponse({"ok": True, "station": station.name if station else ""})

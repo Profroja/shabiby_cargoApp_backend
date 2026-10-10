@@ -41,6 +41,15 @@ class Driver(models.Model):
     )
     rating_count = models.IntegerField(default=0)
     region = models.CharField(max_length=150, blank=True, default="")
+    # The cargo station the driver works from: they only receive pickup requests
+    # for this station. `region` keeps the station's name for older records.
+    station = models.ForeignKey(
+        "stations.CargoStation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drivers",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

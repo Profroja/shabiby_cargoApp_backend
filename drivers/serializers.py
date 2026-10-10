@@ -14,6 +14,7 @@ class DriverProfileSerializer(serializers.ModelSerializer):
     license_photo_url = serializers.SerializerMethodField()
     profile_photo = serializers.SerializerMethodField()
     profile_photo_url = serializers.SerializerMethodField()
+    station_name = serializers.CharField(source="station.name", read_only=True, default="")
 
     class Meta:
         model = Driver
@@ -40,10 +41,15 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "rating_avg",
             "rating_count",
             "region",
+            "station",
+            "station_name",
             "created_at",
             "updated_at",
         )
+        # Only admins change a driver's station (it decides which requests they get).
         read_only_fields = (
+            "station",
+            "region",
             "id",
             "approval_status",
             "is_verified",
@@ -119,6 +125,8 @@ class DriverRegistrationSerializer(serializers.Serializer):
     license_photo = serializers.ImageField()
     profile_photo = serializers.ImageField()
     region = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
+    # Id of the cargo station picked at registration.
+    station = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
 
     def validate_license_plate(self, value):
         if not value:
