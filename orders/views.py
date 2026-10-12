@@ -26,6 +26,24 @@ class CargoOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return CargoOrder.objects.filter(customer=self.request.user)
 
+    def perform_destroy(self, instance):
+        """Customer cancels. Before a driver accepts, the order is removed; after that it
+        is kept and marked cancelled, so the driver sees the cancellation and the trip
+        stays on record."""
+        from django.utils import timezone
+
+        from trips.models import CargoTrip
+
+        if not instance.trips.filter(driver__isnull=False).exists():
+            instance.delete()
+            return
+        now = timezone.now()
+        instance.trips.exclude(status__in=["delivered_to_station", "cancelled"]).update(
+            status=CargoTrip.Status.CANCELLED, cancelled_at=now, updated_at=now
+        )
+        instance.status = CargoOrder.Status.CANCELLED
+        instance.save(update_fields=["status", "updated_at"])
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
