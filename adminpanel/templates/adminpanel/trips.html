@@ -1,7 +1,8 @@
 {% extends "adminpanel/base.html" %}
 {% block title %}Trips{% endblock %}
 {% block content %}
-<h2 class="mb-4">Trips</h2>
+<h2 class="mb-1">Trips</h2>
+<p class="text-muted small mb-3">{% if user.role != 'admin' %}Pickup trips bringing customers' cargo to {{ user.station.name }}.{% else %}All pickup trips.{% endif %}</p>
 <div class="card stat-card">
     <div class="table-responsive">
         <table class="table table-hover mb-0">

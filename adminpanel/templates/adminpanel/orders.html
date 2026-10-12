@@ -1,7 +1,25 @@
 {% extends "adminpanel/base.html" %}
 {% block title %}Orders{% endblock %}
 {% block content %}
-<h2 class="mb-4">Orders</h2>
+<div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+    <div>
+        <h2 class="mb-0">Orders</h2>
+        {% if user.role != 'admin' %}
+        <p class="text-muted small mb-0">
+            {% if direction == 'out' %}Requests from customers near {{ user.station.name }}: their cargo starts at your station.
+            {% elif direction == 'in' %}Cargo on its way to, or waiting at, {{ user.station.name }}.
+            {% else %}All orders from or to {{ user.station.name }}.{% endif %}
+        </p>
+        {% endif %}
+    </div>
+    {% if user.role != 'admin' %}
+    <div class="btn-group">
+        <a href="?dir=out" class="btn btn-sm {% if direction == 'out' %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi bi-box-arrow-up-right"></i> From my station</a>
+        <a href="?dir=in" class="btn btn-sm {% if direction == 'in' %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi bi-box-arrow-in-down-left"></i> To my station</a>
+        <a href="?dir=all" class="btn btn-sm {% if direction == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}">All</a>
+    </div>
+    {% endif %}
+</div>
 <div class="card stat-card">
     <div class="table-responsive">
         <table class="table table-hover mb-0">

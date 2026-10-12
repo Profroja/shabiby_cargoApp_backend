@@ -50,6 +50,15 @@ class Driver(models.Model):
         blank=True,
         related_name="drivers",
     )
+    # Admin or station staff member who registered the driver in the admin panel
+    # (empty when the driver signed up in the app).
+    registered_by = models.ForeignKey(
+        "auths.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="registered_drivers",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

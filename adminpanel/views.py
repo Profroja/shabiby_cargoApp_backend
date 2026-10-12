@@ -41,6 +41,14 @@ def is_panel_user(user):
     )
 
 
+def _scoped_drivers(user):
+    """All drivers for admins; staff only see drivers of their own station."""
+    qs = Driver.objects.all()
+    if not is_admin(user):
+        qs = qs.filter(station_id=user.station_id)
+    return qs
+
+
 def _scoped_orders(user):
     """All orders for admins; staff only see orders leaving from or going to their station."""
     qs = CargoOrder.objects.all()
@@ -88,6 +96,8 @@ def dashboard(request):
             "ready_for_collection": orders.filter(
                 destination_station=station_id, status=CargoOrder.Status.ARRIVED_AT_DESTINATION
             ).count(),
+            "station_drivers": _scoped_drivers(request.user).count(),
+            "pending_drivers": _scoped_drivers(request.user).filter(approval_status="pending").count(),
         })
     total_customers = User.objects.filter(role="customer").count()
     total_drivers = Driver.objects.count()
@@ -134,23 +144,36 @@ def customer_delete(request, pk):
 
 
 @login_required
-@user_passes_test(is_admin)
+@user_passes_test(is_panel_user)
 def driver_list(request):
+    from vehicles.models import VehicleType
+
     status_filter = request.GET.get("status", "")
-    drivers = Driver.objects.select_related("user", "vehicle_type", "station").order_by("-created_at")
+    drivers = _scoped_drivers(request.user).select_related(
+        "user", "vehicle_type", "station", "registered_by"
+    ).order_by("-created_at")
     if status_filter:
         drivers = drivers.filter(approval_status=status_filter)
     drivers = list(drivers)
     accounts = accounts_for(drivers)
     for driver in drivers:
         driver.account = accounts[driver.id]
-    return render(request, "adminpanel/drivers.html", {"drivers": drivers, "status_filter": status_filter})
+    return render(request, "adminpanel/drivers.html", {
+        "drivers": drivers,
+        "status_filter": status_filter,
+        "is_admin": is_admin(request.user),
+        "vehicle_types": VehicleType.objects.filter(is_active=True).order_by("id"),
+        "stations": CargoStation.objects.filter(is_active=True).order_by("name"),
+        "is_admin": is_admin(request.user),
+    })
 
 
 @login_required
-@user_passes_test(is_admin)
+@user_passes_test(is_panel_user)
 def driver_detail(request, pk):
-    driver = get_object_or_404(Driver.objects.select_related("user", "vehicle_type", "station"), pk=pk)
+    driver = get_object_or_404(
+        _scoped_drivers(request.user).select_related("user", "vehicle_type", "station", "registered_by"), pk=pk
+    )
     trips = list(
         driver.trips.select_related("order", "order__customer").order_by("-created_at")
     )
@@ -228,11 +251,21 @@ def driver_delete(request, pk):
 @user_passes_test(is_panel_user)
 def order_list(request):
     orders = _scoped_orders(request.user).select_related("customer").order_by("-created_at")
+    direction = ""
+    if not is_admin(request.user):
+        # "out": requests from customers near this station (it is their origin);
+        # "in": cargo on its way to / arrived at this station.
+        direction = request.GET.get("dir", "out")
+        station_id = str(request.user.station_id)
+        if direction == "out":
+            orders = orders.filter(origin_station=station_id)
+        elif direction == "in":
+            orders = orders.filter(destination_station=station_id)
     station_map = _get_station_name_map()
     for order in orders:
         order.origin_station_name = station_map.get(str(order.origin_station), order.origin_station)
         order.destination_station_name = station_map.get(str(order.destination_station), order.destination_station)
-    return render(request, "adminpanel/orders.html", {"orders": orders})
+    return render(request, "adminpanel/orders.html", {"orders": orders, "direction": direction})
 
 
 @login_required
@@ -299,7 +332,7 @@ def order_update_status(request, pk):
 def trip_list(request):
     trips = CargoTrip.objects.select_related("order", "order__customer", "driver", "driver__user").order_by("-created_at")
     if not is_admin(request.user):
-        trips = trips.filter(order__in=_scoped_orders(request.user))
+        trips = trips.filter(destination_station=str(request.user.station_id))
     return render(request, "adminpanel/trips.html", {"trips": trips})
 
 
@@ -923,3 +956,100 @@ def station_band_delete(request, pk):
         return JsonResponse({"error": "POST required"}, status=405)
     get_object_or_404(StationFareBand, pk=pk).delete()
     return JsonResponse({"ok": True})
+
+
+# ---------- Driver registration from the panel ----------
+
+MAX_PHOTO_BYTES = 10 * 1024 * 1024
+
+
+def _photo(files, field, label):
+    photo = files.get(field)
+    if not photo:
+        raise ValueError(f"{label} is required.")
+    if not (photo.content_type or "").startswith("image/"):
+        raise ValueError(f"{label} must be an image.")
+    if photo.size > MAX_PHOTO_BYTES:
+        raise ValueError(f"{label} must be smaller than 10 MB.")
+    return photo
+
+
+@login_required
+@user_passes_test(is_panel_user)
+def driver_register(request):
+    """Register a driver with the same details as the driver app. They start as
+    pending; only a global admin can approve them. Station staff always register
+    drivers for their own station."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    from auths.serializers import normalize_phone
+    from drivers.dispatch import local_station
+    from vehicles.models import VehicleType
+
+    post = request.POST
+    try:
+        first_name = post.get("first_name", "").strip()
+        last_name = post.get("last_name", "").strip()
+        if not first_name or not last_name:
+            raise ValueError("First and last name are required.")
+        phone = normalize_phone(post.get("phone_number", ""))
+        if len(phone) != 10 or not phone.startswith("0"):
+            raise ValueError("Enter a valid phone number, e.g. 0712345678.")
+
+        vehicle_type = VehicleType.objects.filter(pk=post.get("vehicle_type") or 0, is_active=True).first()
+        if vehicle_type is None:
+            raise ValueError("Choose the vehicle type.")
+        license_plate = post.get("license_plate", "").strip().upper()
+        license_number = post.get("license_number", "").strip()
+        if not license_plate or not license_number:
+            raise ValueError("License plate and driving license number are required.")
+        if Driver.objects.filter(license_plate__iexact=license_plate).exists():
+            raise ValueError(f"A driver with plate {license_plate} is already registered.")
+
+        if is_admin(request.user):
+            station = local_station(post.get("station"))
+            if station is None:
+                raise ValueError("Choose the driver's cargo station.")
+        else:
+            station = request.user.station
+
+        profile_photo = _photo(request.FILES, "profile_photo", "Profile photo")
+        license_photo = _photo(request.FILES, "license_photo", "License photo")
+
+        user = User.objects.filter(phone_number=phone).first()
+        if user and hasattr(user, "driver"):
+            raise ValueError(f"{phone} is already registered as a driver.")
+        if user and user.role in ("admin", "agent"):
+            raise ValueError(f"{phone} belongs to a staff account.")
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+    # Same as signing up in the app: an existing customer account with this phone
+    # becomes the driver account; otherwise a new account is created. The driver
+    # logs in to the driver app with this phone number and an SMS code.
+    if user is None:
+        username = f"phone_{phone}"
+        while User.objects.filter(username=username).exists():
+            username += "_"
+        user = User.objects.create_user(username=username, phone_number=phone, auth_provider="phone")
+    user.first_name = first_name
+    user.middle_name = post.get("middle_name", "").strip()
+    user.last_name = last_name
+    user.role = "driver"
+    user.save(update_fields=["first_name", "middle_name", "last_name", "role", "updated_at"])
+
+    driver = Driver.objects.create(
+        user=user,
+        vehicle_type=vehicle_type,
+        vehicle_name=post.get("vehicle_name", "").strip(),
+        vehicle_color=post.get("vehicle_color", "").strip(),
+        license_plate=license_plate,
+        license_number=license_number,
+        national_id_number=post.get("national_id_number", "").strip(),
+        profile_photo=profile_photo,
+        license_photo=license_photo,
+        station=station,
+        region=station.name,
+        registered_by=request.user,
+    )
+    return JsonResponse({"ok": True, "id": str(driver.pk), "url": reverse("adminpanel:driver-detail", args=[driver.pk])})

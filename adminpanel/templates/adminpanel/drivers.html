@@ -2,13 +2,19 @@
 {% load panel_extras %}
 {% block title %}Drivers{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2 class="mb-0">Drivers</h2>
-    <div class="d-flex gap-2">
+<div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+    <div>
+        <h2 class="mb-0">Drivers</h2>
+        {% if not is_admin %}<p class="text-muted small mb-0"><i class="bi bi-building"></i> Drivers at {{ user.station.name }} station</p>{% endif %}
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
         <a href="{% url 'adminpanel:drivers' %}" class="btn btn-sm btn-outline-secondary filter-btn {% if not status_filter %}active{% endif %}">All</a>
         <a href="{% url 'adminpanel:drivers' %}?status=pending" class="btn btn-sm btn-outline-warning filter-btn {% if status_filter == 'pending' %}active{% endif %}">Pending</a>
         <a href="{% url 'adminpanel:drivers' %}?status=approved" class="btn btn-sm btn-outline-success filter-btn {% if status_filter == 'approved' %}active{% endif %}">Approved</a>
         <a href="{% url 'adminpanel:drivers' %}?status=rejected" class="btn btn-sm btn-outline-danger filter-btn {% if status_filter == 'rejected' %}active{% endif %}">Rejected</a>
+        <button type="button" class="btn btn-sm btn-primary" onclick="openRegister()">
+            <i class="bi bi-person-plus"></i> Register Driver
+        </button>
     </div>
 </div>
 <div class="card stat-card">
@@ -23,8 +29,10 @@
                     <th>Vehicle</th>
                     <th>Level</th>
                     <th class="text-end">Trips</th>
+                    {% if is_admin %}
                     <th class="text-end">Balance owed</th>
                     <th>Subscription</th>
+                    {% endif %}
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -45,6 +53,7 @@
                         <a href="{% url 'adminpanel:driver-detail' driver.id %}" class="text-decoration-none fw-semibold">
                             {{ driver.user.first_name }} {{ driver.user.middle_name }} {{ driver.user.last_name }}
                         </a>
+                        {% if driver.registered_by %}<div class="small text-muted">Registered by {{ driver.registered_by.first_name|default:driver.registered_by.username }}</div>{% endif %}
                     </td>
                     <td>{{ driver.user.phone_number|default:"—" }}</td>
                     <td>
@@ -59,11 +68,13 @@
                         <div class="small text-muted"><i class="bi bi-star-fill text-warning"></i> {{ driver.rating_avg }} ({{ driver.rating_count }})</div>
                     </td>
                     <td class="text-end">{{ driver.account.completed_trips }}</td>
+                    {% if is_admin %}
                     <td class="text-end">
                         {% if driver.account.balance_due > 0 %}<strong class="text-danger">{{ driver.account.balance_due|tzs }}</strong>
                         {% else %}<span class="text-success small">Paid up</span>{% endif %}
                     </td>
                     <td>{% include "adminpanel/_sub_badge.html" with a=driver.account %}</td>
+                    {% endif %}
                     <td>
                         {% if driver.approval_status == 'pending' %}
                         <span class="badge badge-pending">Pending</span>
@@ -80,10 +91,156 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="11" class="text-center text-muted py-4">No drivers found.</td></tr>
+                <tr><td colspan="{% if is_admin %}11{% else %}9{% endif %}" class="text-center text-muted py-4">No drivers found.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
+<div class="modal fade" id="registerModal" tabindex="-1" aria-labelledby="registerTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="registerTitle"><i class="bi bi-person-plus"></i> Register Driver</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">
+                    The driver starts as <strong>Pending</strong> until an admin approves them. They log in to the
+                    Shabiby Driver app with this phone number (SMS code).
+                </p>
+                <form id="registerForm" class="row g-3" onsubmit="submitRegister(event)" enctype="multipart/form-data">
+                    <div class="col-12"><h6 class="mb-0 text-muted">Driver</h6></div>
+                    <div class="col-md-4">
+                        <label class="form-label">First name *</label>
+                        <input name="first_name" class="form-control" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Middle name</label>
+                        <input name="middle_name" class="form-control">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Last name *</label>
+                        <input name="last_name" class="form-control" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Phone number *</label>
+                        <input name="phone_number" class="form-control" inputmode="tel" placeholder="07XXXXXXXX" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Driving license no. *</label>
+                        <input name="license_number" class="form-control" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">National ID</label>
+                        <input name="national_id_number" class="form-control">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Cargo station *</label>
+                        {% if is_admin %}
+                        <select name="station" class="form-select" required>
+                            <option value="">Choose a station…</option>
+                            {% for st in stations %}
+                            <option value="{{ st.pk }}">{{ st.name }} ({{ st.branch_code }})</option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <input class="form-control" value="{{ user.station.name }}" disabled>
+                        <div class="form-text">Drivers you register work from your station.</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-12"><h6 class="mb-0 mt-2 text-muted">Vehicle</h6></div>
+                    <div class="col-md-6">
+                        <label class="form-label">Vehicle type *</label>
+                        <select name="vehicle_type" class="form-select" required>
+                            <option value="">Choose…</option>
+                            {% for vt in vehicle_types %}
+                            <option value="{{ vt.pk }}">{{ vt.display_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">License plate *</label>
+                        <input name="license_plate" class="form-control text-uppercase" placeholder="e.g. MC 123 ABC" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Vehicle name / model</label>
+                        <input name="vehicle_name" class="form-control" placeholder="e.g. Bajaj Boxer">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Vehicle color</label>
+                        <input name="vehicle_color" class="form-control">
+                    </div>
+
+                    <div class="col-12"><h6 class="mb-0 mt-2 text-muted">Photos</h6></div>
+                    <div class="col-md-6">
+                        <label class="form-label">Profile photo *</label>
+                        <input name="profile_photo" type="file" accept="image/*" class="form-control" required onchange="previewPhoto(this, 'profilePreview')">
+                        <img id="profilePreview" class="img-fluid rounded mt-2 d-none" style="max-height: 180px;" alt="Profile photo preview">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Driving license / ID photo *</label>
+                        <input name="license_photo" type="file" accept="image/*" class="form-control" required onchange="previewPhoto(this, 'licensePreview')">
+                        <img id="licensePreview" class="img-fluid rounded mt-2 d-none" style="max-height: 180px;" alt="License photo preview">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="registerForm" class="btn btn-primary" id="registerSubmit">Register Driver</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openRegister() {
+    const form = document.getElementById('registerForm');
+    form.reset();
+    ['profilePreview', 'licensePreview'].forEach((id) => document.getElementById(id).classList.add('d-none'));
+    bootstrap.Modal.getOrCreateInstance('#registerModal').show();
+}
+
+function previewPhoto(input, imgId) {
+    const img = document.getElementById(imgId);
+    const file = input.files && input.files[0];
+    img.classList.toggle('d-none', !file);
+    if (file) img.src = URL.createObjectURL(file);
+}
+
+async function submitRegister(event) {
+    event.preventDefault();
+    const button = document.getElementById('registerSubmit');
+    button.disabled = true;
+    try {
+        let res;
+        try {
+            res = await fetch("{% url 'adminpanel:driver-register' %}", {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken() },
+                body: new FormData(event.target),
+            });
+        } catch (e) {
+            throw new Error('Network error. Check your connection and try again.');
+        }
+        let data = {};
+        try { data = await res.json(); } catch (e) { /* non-JSON error page */ }
+        if (!res.ok || !data.ok) throw new Error(data.error || `Request failed (HTTP ${res.status}).`);
+        bootstrap.Modal.getInstance('#registerModal').hide();
+        await swalSuccess('The driver is waiting for admin approval.', 'Driver registered');
+        window.location.href = data.url;
+    } catch (err) {
+        swalError(err.message, 'Could not register driver');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+// Open the form straight away when arriving from the dashboard shortcut.
+if (new URLSearchParams(location.search).has('register')) openRegister();
+</script>
 {% endblock %}

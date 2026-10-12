@@ -11,6 +11,7 @@ urlpatterns = [
     path("customers/", views.customer_list, name="customers"),
     path("customers/<uuid:pk>/delete/", views.customer_delete, name="customer-delete"),
     path("drivers/", views.driver_list, name="drivers"),
+    path("drivers/register/", views.driver_register, name="driver-register"),
     path("drivers/<uuid:pk>/", views.driver_detail, name="driver-detail"),
     path("drivers/<uuid:pk>/approve/", views.driver_approve, name="driver-approve"),
     path("drivers/<uuid:pk>/delete/", views.driver_delete, name="driver-delete"),

@@ -33,7 +33,19 @@
 <div class="card stat-card">
     <div class="card-body d-flex justify-content-between align-items-center">
         <div><h5 class="mb-1"><i class="bi bi-box"></i> Station Orders</h5><span class="text-muted">{{ total_orders }} orders from or to this station</span></div>
-        <a href="{% url 'adminpanel:orders' %}" class="btn btn-primary">View Orders →</a>
+        <a href="{% url 'adminpanel:orders' %}?dir=out" class="btn btn-primary">View Orders →</a>
+    </div>
+</div>
+<div class="card stat-card mt-3">
+    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h5 class="mb-1"><i class="bi bi-person-badge"></i> Station Drivers</h5>
+            <span class="text-muted">{{ station_drivers }} driver{{ station_drivers|pluralize }}{% if pending_drivers %} · <span class="text-warning fw-semibold">{{ pending_drivers }} waiting for admin approval</span>{% endif %}</span>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'adminpanel:drivers' %}" class="btn btn-outline-primary">View Drivers</a>
+            <a href="{% url 'adminpanel:drivers' %}?register=1" class="btn btn-primary"><i class="bi bi-person-plus"></i> Register Driver</a>
+        </div>
     </div>
 </div>
 {% else %}
