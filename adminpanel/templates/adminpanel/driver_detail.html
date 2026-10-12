@@ -128,7 +128,10 @@
             <div class="col-lg-7">
                 <div class="card stat-card mb-3">
                     <div class="card-body">
-                        <h6 class="mb-3"><i class="bi bi-person"></i> Driver details</h6>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0"><i class="bi bi-person"></i> Driver details</h6>
+                            {% if is_admin %}<button class="btn btn-sm btn-outline-primary" onclick="openEditDriver()"><i class="bi bi-pencil"></i> Edit Details</button>{% endif %}
+                        </div>
                         <table class="table table-sm table-borderless mb-0">
                             <tr><td class="text-muted" style="width: 170px;">Full name</td><td><strong>{{ driver.user.first_name }} {{ driver.user.middle_name }} {{ driver.user.last_name }}</strong></td></tr>
                             <tr><td class="text-muted">Phone</td><td>{{ driver.user.phone_number|default:"—" }}</td></tr>
@@ -470,6 +473,45 @@
 </div>
 
 {% if is_admin %}
+<!-- Edit driver -->
+<div class="modal fade" id="editDriverModal" tabindex="-1" aria-labelledby="editDriverTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editDriverTitle"><i class="bi bi-pencil"></i> Edit Driver Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editDriverForm" class="row g-3" onsubmit="submitEditDriver(event)" enctype="multipart/form-data">
+                    <div class="col-md-4"><label class="form-label">First name *</label><input name="first_name" class="form-control" value="{{ driver.user.first_name }}" required></div>
+                    <div class="col-md-4"><label class="form-label">Middle name</label><input name="middle_name" class="form-control" value="{{ driver.user.middle_name }}"></div>
+                    <div class="col-md-4"><label class="form-label">Last name *</label><input name="last_name" class="form-control" value="{{ driver.user.last_name }}" required></div>
+                    <div class="col-md-4"><label class="form-label">Phone number *</label><input name="phone_number" class="form-control" value="{{ driver.user.phone_number|default_if_none:"" }}" required>
+                        <div class="form-text">The driver logs in with this number.</div></div>
+                    <div class="col-md-4"><label class="form-label">Driving license no. *</label><input name="license_number" class="form-control" value="{{ driver.license_number }}" required></div>
+                    <div class="col-md-4"><label class="form-label">National ID</label><input name="national_id_number" class="form-control" value="{{ driver.national_id_number }}"></div>
+                    <div class="col-md-6"><label class="form-label">Vehicle type *</label>
+                        <select name="vehicle_type" class="form-select" required>
+                            {% for vt in vehicle_types %}<option value="{{ vt.pk }}" {% if driver.vehicle_type_id == vt.pk %}selected{% endif %}>{{ vt.display_name }}</option>{% endfor %}
+                        </select></div>
+                    <div class="col-md-6"><label class="form-label">License plate *</label><input name="license_plate" class="form-control text-uppercase" value="{{ driver.license_plate }}" required></div>
+                    <div class="col-md-6"><label class="form-label">Vehicle name / model</label><input name="vehicle_name" class="form-control" value="{{ driver.vehicle_name }}"></div>
+                    <div class="col-md-6"><label class="form-label">Vehicle color</label><input name="vehicle_color" class="form-control" value="{{ driver.vehicle_color }}"></div>
+                    <div class="col-md-6"><label class="form-label">New profile photo</label><input name="profile_photo" type="file" accept="image/*" class="form-control">
+                        <div class="form-text">Leave empty to keep the current photo.</div></div>
+                    <div class="col-md-6"><label class="form-label">New license / ID photo</label><input name="license_photo" type="file" accept="image/*" class="form-control">
+                        <div class="form-text">Leave empty to keep the current photo.</div></div>
+                </form>
+                <p class="small text-muted mt-3 mb-0">To change the cargo station, use the Cargo station box on the Details tab.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="editDriverForm" class="btn btn-primary" id="editDriverSubmit">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Set subscription -->
 <div class="modal fade" id="subscriptionModal" tabindex="-1" aria-labelledby="subscriptionModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -677,6 +719,40 @@ async function resolveIssue(url, isResolved) {
 async function deleteRecord(url, question) {
     const ok = await swalConfirm('This cannot be undone.', { title: question, confirmText: 'Delete', danger: true });
     if (ok) postAndReload(url, null, 'Deleted.');
+}
+
+// --- Edit details ---
+function openEditDriver() {
+    document.getElementById('editDriverForm').reset();
+    bootstrap.Modal.getOrCreateInstance('#editDriverModal').show();
+}
+
+async function submitEditDriver(event) {
+    event.preventDefault();
+    const button = document.getElementById('editDriverSubmit');
+    button.disabled = true;
+    try {
+        let res;
+        try {
+            res = await fetch("{% url 'adminpanel:driver-update' driver.id %}", {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken() },
+                body: new FormData(event.target),
+            });
+        } catch (e) {
+            throw new Error('Network error. Check your connection and try again.');
+        }
+        let data = {};
+        try { data = await res.json(); } catch (e) { /* non-JSON error page */ }
+        if (!res.ok || !data.ok) throw new Error(data.error || `Request failed (HTTP ${res.status}).`);
+        bootstrap.Modal.getInstance('#editDriverModal').hide();
+        await swalSuccess('Driver details saved.');
+        location.reload();
+    } catch (err) {
+        swalError(err.message, 'Could not save');
+    } finally {
+        button.disabled = false;
+    }
 }
 
 // --- Cargo station ---

@@ -17,6 +17,7 @@ from orders.models import CargoOrder
 from stations.models import CargoStation, StationFareBand
 from stations.views import _fetch_cargo_centers, fetch_external_for_import
 from trips.models import CargoTrip
+from vehicles.models import VehicleType
 
 
 def _get_station_name_map():
@@ -146,8 +147,6 @@ def customer_delete(request, pk):
 @login_required
 @user_passes_test(is_panel_user)
 def driver_list(request):
-    from vehicles.models import VehicleType
-
     status_filter = request.GET.get("status", "")
     drivers = _scoped_drivers(request.user).select_related(
         "user", "vehicle_type", "station", "registered_by"
@@ -164,7 +163,6 @@ def driver_list(request):
         "is_admin": is_admin(request.user),
         "vehicle_types": VehicleType.objects.filter(is_active=True).order_by("id"),
         "stations": CargoStation.objects.filter(is_active=True).order_by("name"),
-        "is_admin": is_admin(request.user),
     })
 
 
@@ -219,6 +217,8 @@ def driver_detail(request, pk):
         "levels": LEVELS,
         "today": timezone.localdate(),
         "stations": CargoStation.objects.filter(is_active=True).order_by("name"),
+        "vehicle_types": VehicleType.objects.filter(is_active=True).order_by("id"),
+        "is_admin": is_admin(request.user),
     })
 
 
@@ -984,7 +984,6 @@ def driver_register(request):
         return JsonResponse({"error": "POST required"}, status=405)
     from auths.serializers import normalize_phone
     from drivers.dispatch import local_station
-    from vehicles.models import VehicleType
 
     post = request.POST
     try:
@@ -1053,3 +1052,58 @@ def driver_register(request):
         registered_by=request.user,
     )
     return JsonResponse({"ok": True, "id": str(driver.pk), "url": reverse("adminpanel:driver-detail", args=[driver.pk])})
+
+
+@login_required
+@user_passes_test(is_admin)
+def driver_update(request, pk):
+    """Admin edits a driver's details; photos are replaced only when a new one is sent."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    from auths.serializers import normalize_phone
+
+    driver = get_object_or_404(Driver.objects.select_related("user"), pk=pk)
+    user = driver.user
+    post = request.POST
+    try:
+        first_name = post.get("first_name", "").strip()
+        last_name = post.get("last_name", "").strip()
+        if not first_name or not last_name:
+            raise ValueError("First and last name are required.")
+        phone = normalize_phone(post.get("phone_number", ""))
+        if len(phone) != 10 or not phone.startswith("0"):
+            raise ValueError("Enter a valid phone number, e.g. 0712345678.")
+        if User.objects.filter(phone_number=phone).exclude(pk=user.pk).exists():
+            raise ValueError(f"{phone} already belongs to another account.")
+        vehicle_type = VehicleType.objects.filter(pk=post.get("vehicle_type") or 0).first()
+        if vehicle_type is None:
+            raise ValueError("Choose the vehicle type.")
+        license_plate = post.get("license_plate", "").strip().upper()
+        license_number = post.get("license_number", "").strip()
+        if not license_plate or not license_number:
+            raise ValueError("License plate and driving license number are required.")
+        if Driver.objects.filter(license_plate__iexact=license_plate).exclude(pk=driver.pk).exists():
+            raise ValueError(f"Another driver already has plate {license_plate}.")
+        profile_photo = _photo(request.FILES, "profile_photo", "Profile photo") if request.FILES.get("profile_photo") else None
+        license_photo = _photo(request.FILES, "license_photo", "License photo") if request.FILES.get("license_photo") else None
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+    user.first_name = first_name
+    user.middle_name = post.get("middle_name", "").strip()
+    user.last_name = last_name
+    user.phone_number = phone
+    user.save(update_fields=["first_name", "middle_name", "last_name", "phone_number", "updated_at"])
+
+    driver.vehicle_type = vehicle_type
+    driver.vehicle_name = post.get("vehicle_name", "").strip()
+    driver.vehicle_color = post.get("vehicle_color", "").strip()
+    driver.license_plate = license_plate
+    driver.license_number = license_number
+    driver.national_id_number = post.get("national_id_number", "").strip()
+    if profile_photo:
+        driver.profile_photo = profile_photo
+    if license_photo:
+        driver.license_photo = license_photo
+    driver.save()
+    return JsonResponse({"ok": True})
