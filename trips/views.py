@@ -5,7 +5,7 @@ from django.db.models import Q
 from django.utils import timezone as tz_utils
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -31,6 +31,10 @@ class CargoTripListView(generics.ListCreateAPIView):
         data = serializer.validated_data
         if data["order"].customer_id != self.request.user.id:
             raise PermissionDenied("You can only request trips for your own orders.")
+        if data["order"].shipping_fare_status != CargoOrder.ShippingFareStatus.PAID:
+            # The shipping fare is paid to Shabiby (Lipa Namba) and confirmed by staff
+            # before a driver is sent; the customer then pays the driver only the trip fare.
+            raise ValidationError({"error": "Pay the shipping fare and wait for confirmation before requesting a driver."})
         # The price comes from the station's rate, not from the app.
         fare = pickup_fare(data.get("destination_station"), data.get("distance_km"), data.get("vehicle_type"))
         serializer.save(fare_amount=fare)
