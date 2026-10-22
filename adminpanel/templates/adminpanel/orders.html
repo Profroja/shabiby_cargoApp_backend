@@ -64,6 +64,8 @@
                     <td>
                         {% if order.shipping_fare_status == 'priced' %}
                             <span class="badge bg-success">TSh {{ order.shipping_fare }}</span>
+                        {% elif order.shipping_fare_status == 'awaiting_confirmation' %}
+                            <span class="badge bg-warning text-dark" title="Customer says they paid by Lipa Namba">Confirm payment: TSh {{ order.shipping_fare }}</span>
                         {% elif order.shipping_fare_status == 'paid' %}
                             <span class="badge bg-primary">Paid: TSh {{ order.shipping_fare }}</span>
                         {% else %}

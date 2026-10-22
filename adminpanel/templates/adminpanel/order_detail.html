@@ -122,6 +122,16 @@
                         <td>{{ order.updated_at|date:"M d, Y H:i" }}</td>
                     </tr>
                 </table>
+                {% if pickup_trip.status == 'delivered_to_station' and not pickup_trip.station_received_at %}
+                <div class="alert alert-warning mt-3 mb-2 small">
+                    <i class="bi bi-box-seam"></i> The driver marked this cargo as <strong>delivered to the station</strong>. Confirm once you have it.
+                </div>
+                <button class="btn btn-success w-100" onclick="confirmReceived('{{ order.id }}')">
+                    <i class="bi bi-check2-square"></i> Confirm Cargo Received
+                </button>
+                {% elif pickup_trip.station_received_at %}
+                <p class="small text-muted mt-3 mb-0"><i class="bi bi-check2-square text-success"></i> Received at the station {{ pickup_trip.station_received_at|date:"M d, H:i" }}{% if pickup_trip.station_received_by %} by {{ pickup_trip.station_received_by.first_name|default:pickup_trip.station_received_by.username }}{% endif %}</p>
+                {% endif %}
                 {% if order.status == 'at_origin_station' %}
                 <button class="btn btn-primary w-100 mt-3" onclick="updateOrderStatus('{{ order.id }}', 'in_transit')">
                     Dispatch to Destination Station
@@ -225,9 +235,23 @@
                     <div class="alert alert-success">
                         <strong>Fare Set:</strong> TSh {{ order.shipping_fare }}
                     </div>
+                    {% elif order.shipping_fare_status == 'awaiting_confirmation' %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-hourglass-split"></i> <strong>Customer says they paid</strong> TSh {{ order.shipping_fare }} by Lipa Namba
+                        <div class="small mt-1">
+                            {{ order.payment_claimed_at|date:"M d, H:i" }}
+                            · Reference: <strong>{{ order.payment_reference|default:"not given" }}</strong>
+                        </div>
+                        <div class="small text-muted">Check the Lipa Namba account, then approve or reject.</div>
+                    </div>
+                    <div class="d-flex gap-2 mb-2">
+                        <button class="btn btn-success flex-grow-1" onclick="markPaid('{{ order.id }}')"><i class="bi bi-check-lg"></i> Approve Payment</button>
+                        <button class="btn btn-outline-danger" onclick="rejectPayment('{{ order.id }}')"><i class="bi bi-x-lg"></i> Reject</button>
+                    </div>
                     {% elif order.shipping_fare_status == 'paid' %}
                     <div class="alert alert-primary">
-                        <strong>Paid:</strong> TSh {{ order.shipping_fare }}
+                        <i class="bi bi-check-circle"></i> <strong>Paid:</strong> TSh {{ order.shipping_fare }}
+                        {% if order.payment_reference %}<div class="small">Reference: {{ order.payment_reference }}</div>{% endif %}
                     </div>
                     {% else %}
                     <div class="alert alert-warning">
@@ -247,8 +271,11 @@
                 {% endif %}
 
                 {% if order.shipping_fare_status == 'priced' %}
+                <button class="btn btn-success w-100 mb-3" onclick="markPaid('{{ order.id }}')">
+                    <i class="bi bi-cash-coin"></i> Mark Shipping as Paid
+                </button>
                 <div class="mt-3">
-                    <p class="text-muted"><small>Customer will be notified of the shipping fare. The fare can be updated if needed.</small></p>
+                    <p class="text-muted"><small>The customer pays the shipping fare to Shabiby Cargo (not to the driver). The fare can be updated until it is paid.</small></p>
                     <form id="update-fare-form" onsubmit="return submitFare(event, '{{ order.id }}')">
                         <div class="mb-3">
                             <label class="form-label">Update Shipping Fare (TSh)</label>
@@ -313,6 +340,42 @@ async function updateOrderStatus(orderId, newStatus) {
     try {
         await panelPost(`/panel/orders/${orderId}/update-status/`, { status: newStatus });
         await swalSuccess('Order status updated.');
+        location.reload();
+    } catch (err) {
+        swalError(err.message);
+    }
+}
+
+async function confirmReceived(orderId) {
+    const ok = await swalConfirm('The cargo is now at your station and can be dispatched. The customer sees "Arrived at Cargo Station".', { title: 'Confirm cargo received?', confirmText: 'Confirm' });
+    if (!ok) return;
+    try {
+        await panelPost(`/panel/orders/${orderId}/confirm-received/`);
+        await swalSuccess('Cargo received.');
+        location.reload();
+    } catch (err) {
+        swalError(err.message);
+    }
+}
+
+async function markPaid(orderId) {
+    const ok = await swalConfirm('Only do this once the customer has paid the shipping fare to Shabiby Cargo.', { title: 'Mark shipping as paid?', confirmText: 'Mark paid' });
+    if (!ok) return;
+    try {
+        await panelPost(`/panel/orders/${orderId}/mark-paid/`);
+        await swalSuccess('Shipping fare marked as paid.');
+        location.reload();
+    } catch (err) {
+        swalError(err.message);
+    }
+}
+
+async function rejectPayment(orderId) {
+    const ok = await swalConfirm('The customer will be asked to pay again.', { title: 'Payment not received?', confirmText: 'Reject', danger: true });
+    if (!ok) return;
+    try {
+        await panelPost(`/panel/orders/${orderId}/reject-payment/`);
+        await swalSuccess('Payment rejected.');
         location.reload();
     } catch (err) {
         swalError(err.message);

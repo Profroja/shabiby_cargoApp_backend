@@ -43,6 +43,7 @@ class CargoTripSerializer(serializers.ModelSerializer):
     cargo_weight_kg = serializers.SerializerMethodField()
     cargo_size_name = serializers.SerializerMethodField()
     order_status = serializers.CharField(source="order.status", read_only=True)
+    shipping_fare_status = serializers.CharField(source="order.shipping_fare_status", read_only=True)
     order_dispatched_at = serializers.DateTimeField(source="order.dispatched_at", read_only=True)
     order_arrived_at_destination_at = serializers.DateTimeField(
         source="order.arrived_at_destination_at", read_only=True
@@ -94,6 +95,8 @@ class CargoTripSerializer(serializers.ModelSerializer):
             "cargo_weight_kg",
             "cargo_size_name",
             "order_status",
+            "shipping_fare_status",
+            "station_received_at",
             "order_dispatched_at",
             "order_arrived_at_destination_at",
             "order_delivered_at",

@@ -18,6 +18,8 @@ class CargoOrderSerializer(serializers.ModelSerializer):
     destination_station = serializers.CharField()
     cargo_photo_url = serializers.SerializerMethodField()
     pickup_fare = serializers.SerializerMethodField()
+    lipa_number = serializers.SerializerMethodField()
+    lipa_name = serializers.SerializerMethodField()
 
     class Meta:
         model = CargoOrder
@@ -37,6 +39,10 @@ class CargoOrderSerializer(serializers.ModelSerializer):
             "receiver_address",
             "shipping_fare",
             "shipping_fare_status",
+            "payment_reference",
+            "payment_claimed_at",
+            "lipa_number",
+            "lipa_name",
             "pickup_fare",
             "status",
             "dispatched_at",
@@ -45,12 +51,18 @@ class CargoOrderSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("customer", "status", "dispatched_at", "arrived_at_destination_at", "delivered_at", "shipping_fare", "shipping_fare_status", "pickup_fare", "created_at", "updated_at")
+        read_only_fields = ("customer", "status", "dispatched_at", "arrived_at_destination_at", "delivered_at", "shipping_fare", "shipping_fare_status", "payment_reference", "payment_claimed_at", "pickup_fare", "created_at", "updated_at")
 
     def get_cargo_photo_url(self, obj):
         if obj.cargo_photo:
             return f"{settings.BASE_URL}/{obj.cargo_photo.url.lstrip('/')}"
         return None
+
+    def get_lipa_number(self, obj):
+        return getattr(settings, "LIPA_NUMBER", "")
+
+    def get_lipa_name(self, obj):
+        return getattr(settings, "LIPA_NAME", "")
 
     def get_pickup_fare(self, obj):
         trip = obj.trips.first()

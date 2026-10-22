@@ -17,6 +17,7 @@ class CargoOrder(models.Model):
     class ShippingFareStatus(models.TextChoices):
         PENDING = "pending", "Pending"
         PRICED = "priced", "Priced"
+        AWAITING_CONFIRMATION = "awaiting_confirmation", "Payment Sent"
         PAID = "paid", "Paid"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -39,10 +40,14 @@ class CargoOrder(models.Model):
         max_digits=10, decimal_places=2, null=True, blank=True
     )
     shipping_fare_status = models.CharField(
-        max_length=20,
+        max_length=25,
         choices=ShippingFareStatus.choices,
         default=ShippingFareStatus.PENDING,
     )
+    # Customer pays the shipping fare by Lipa Namba, then taps "I have paid";
+    # station staff check it and approve (paid) or reject (back to priced).
+    payment_reference = models.CharField(max_length=100, blank=True, default="")
+    payment_claimed_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=25, choices=Status.choices, default=Status.SUBMITTED
     )

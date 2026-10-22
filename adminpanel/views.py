@@ -1107,3 +1107,52 @@ def driver_update(request, pk):
         driver.license_photo = license_photo
     driver.save()
     return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_panel_user)
+def order_confirm_received(request, pk):
+    """Station staff confirm the driver handed the cargo over at the station."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    order = get_object_or_404(_scoped_orders(request.user), pk=pk)
+    trip = order.trips.filter(leg_type=CargoTrip.LegType.PICKUP, status="delivered_to_station").first()
+    if trip is None:
+        return JsonResponse({"error": "The driver hasn't marked this cargo as delivered yet."}, status=400)
+    if trip.station_received_at:
+        return JsonResponse({"error": "Already confirmed."}, status=400)
+    trip.station_received_at = timezone.now()
+    trip.station_received_by = request.user
+    trip.save(update_fields=["station_received_at", "station_received_by", "updated_at"])
+    if order.status in (CargoOrder.Status.PENDING, CargoOrder.Status.SUBMITTED, CargoOrder.Status.PICKUP_IN_PROGRESS):
+        order.status = CargoOrder.Status.AT_ORIGIN_STATION
+        order.save(update_fields=["status", "updated_at"])
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_panel_user)
+def order_mark_paid(request, pk):
+    """The customer paid the shipping fare to Shabiby (later: automatic push-to-pay)."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    order = get_object_or_404(_scoped_orders(request.user), pk=pk)
+    if order.shipping_fare is None:
+        return JsonResponse({"error": "Set the shipping fare first."}, status=400)
+    order.shipping_fare_status = CargoOrder.ShippingFareStatus.PAID
+    order.save(update_fields=["shipping_fare_status", "updated_at"])
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@user_passes_test(is_panel_user)
+def order_reject_payment(request, pk):
+    """The customer's Lipa Namba payment wasn't found: ask them to pay again."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    order = get_object_or_404(_scoped_orders(request.user), pk=pk)
+    if order.shipping_fare_status != CargoOrder.ShippingFareStatus.AWAITING_CONFIRMATION:
+        return JsonResponse({"error": "There is no payment waiting for confirmation."}, status=400)
+    order.shipping_fare_status = CargoOrder.ShippingFareStatus.PRICED
+    order.save(update_fields=["shipping_fare_status", "updated_at"])
+    return JsonResponse({"ok": True})

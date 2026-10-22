@@ -95,14 +95,12 @@ def can_accept_trips(driver):
 
 def _account(driver, trips, payments, periods, feedback, today):
     completed = [t for t in trips if t.status == "delivered_to_station"]
-    fares = earnings = company = shipping = ZERO
+    fares = earnings = company = ZERO
     for trip in completed:
         fare, earning, share = trip_split(trip)
         fares += fare
         earnings += earning
         company += share
-        # The driver also collects the shipping fare, all of which belongs to the company.
-        shipping += trip.order.shipping_fare or ZERO
 
     commission_paid = sum((p.amount for p in payments if p.kind == "commission"), ZERO)
     subscription_paid = sum((p.amount for p in payments if p.kind == "subscription"), ZERO)
@@ -112,15 +110,13 @@ def _account(driver, trips, payments, periods, feedback, today):
     open_issues = sum(1 for f in feedback if f.category == "issue" and not f.is_resolved)
     level = driver_level(len(completed), driver.rating_avg, open_issues)
 
-    commission_due = company + shipping - commission_paid
+    commission_due = company - commission_paid
     subscription_due = subscription_fees - subscription_paid
     return {
         "completed_trips": len(completed),
         "fares_total": fares,
         "earnings_total": earnings,
-        "company_total": company + shipping,
-        "pickup_company_total": company,
-        "shipping_total": shipping,
+        "company_total": company,
         "commission_paid": commission_paid,
         "commission_due": commission_due,
         "subscription_fees": subscription_fees,

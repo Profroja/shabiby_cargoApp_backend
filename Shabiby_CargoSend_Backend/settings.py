@@ -208,3 +208,7 @@ GOOGLE_MAPS_API_KEY = env("GOOGLE_MAPS_API_KEY", default="AIzaSyCOykpOCnMYQ8F4Ry
 DEFAULT_PRICE_PER_KM = 600
 # Driver's share of a pickup fare (%) when no commission band matches the distance.
 DEFAULT_DRIVER_SHARE_PERCENT = 85
+
+# Lipa Namba shown to customers for paying the shipping fare (set in .env).
+LIPA_NUMBER = env("LIPA_NUMBER", default="")
+LIPA_NAME = env("LIPA_NAME", default="Shabiby Cargo")

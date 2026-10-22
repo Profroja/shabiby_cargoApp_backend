@@ -284,8 +284,6 @@ def update_trip_status(request, pk):
     order_status = None
     if new_status == "picked_up" and order.status in not_picked_up:
         order_status = CargoOrder.Status.PICKUP_IN_PROGRESS
-    elif new_status == "delivered_to_station" and order.status in before_station:
-        order_status = CargoOrder.Status.AT_ORIGIN_STATION
     elif new_status == "cancelled" and order.status in before_station:
         order_status = CargoOrder.Status.CANCELLED
     if order_status:

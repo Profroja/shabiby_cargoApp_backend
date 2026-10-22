@@ -99,3 +99,25 @@ def update_order_status(request, pk):
 
     serializer = CargoOrderSerializer(order, context={"request": request})
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def claim_paid(request, pk):
+    """Customer says they paid the shipping fare by Lipa Namba. Body: {"reference": "<code>"} (optional)."""
+    from django.utils import timezone
+
+    try:
+        order = CargoOrder.objects.get(pk=pk, customer=request.user)
+    except CargoOrder.DoesNotExist:
+        return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+    if order.shipping_fare_status == CargoOrder.ShippingFareStatus.PAID:
+        return Response({"error": "This order is already paid."}, status=status.HTTP_400_BAD_REQUEST)
+    if order.shipping_fare is None or order.shipping_fare_status == CargoOrder.ShippingFareStatus.PENDING:
+        return Response({"error": "The shipping fare hasn't been set yet."}, status=status.HTTP_400_BAD_REQUEST)
+
+    order.payment_reference = str(request.data.get("reference", "")).strip()[:100]
+    order.payment_claimed_at = timezone.now()
+    order.shipping_fare_status = CargoOrder.ShippingFareStatus.AWAITING_CONFIRMATION
+    order.save(update_fields=["payment_reference", "payment_claimed_at", "shipping_fare_status", "updated_at"])
+    return Response(CargoOrderSerializer(order, context={"request": request}).data, status=status.HTTP_200_OK)
